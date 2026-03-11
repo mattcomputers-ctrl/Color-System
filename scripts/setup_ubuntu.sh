@@ -139,6 +139,8 @@ else
 fi
 
 sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};" > /dev/null 2>&1
+sudo -u postgres psql -d "${DB_NAME}" -c "GRANT ALL ON SCHEMA public TO ${DB_USER};" > /dev/null 2>&1
+sudo -u postgres psql -d "${DB_NAME}" -c "ALTER SCHEMA public OWNER TO ${DB_USER};" > /dev/null 2>&1
 
 # ============================================================================
 # STEP 4: Create system user and directories
@@ -228,6 +230,7 @@ echo "[8/12] Initializing database..."
 cd "${APP_DIR}/backend"
 export FLASK_APP=wsgi.py
 export FLASK_ENV=production
+export DATABASE_URL="postgresql://${DB_USER}:${DB_PASS}@localhost:5432/${DB_NAME}"
 
 # The repo ships with migrations/ (alembic.ini, env.py, script.py.mako)
 # but no version files. Ensure the versions directory exists and is clean
@@ -236,13 +239,30 @@ mkdir -p "${APP_DIR}/backend/migrations/versions"
 rm -f "${APP_DIR}/backend/migrations/versions/"*.py 2>/dev/null || true
 
 # Generate and apply migrations
-echo "  Running migrations..."
-flask db migrate -m "Initial schema" 2>&1 | tail -3
-flask db upgrade 2>&1 | tail -3
+echo "  Generating migration..."
+if ! flask db migrate -m "Initial schema" 2>&1; then
+    echo ""
+    echo "  ERROR: flask db migrate failed."
+    echo "  Common causes:"
+    echo "    - Database connection issue (check DATABASE_URL)"
+    echo "    - Model import error"
+    exit 1
+fi
+
+echo "  Applying migration..."
+if ! flask db upgrade 2>&1; then
+    echo ""
+    echo "  ERROR: flask db upgrade failed."
+    exit 1
+fi
 echo "  Database tables created."
 
 echo "  Loading seed data..."
-python seed.py 2>&1 | tail -5
+if ! python seed.py 2>&1; then
+    echo ""
+    echo "  ERROR: seed.py failed."
+    exit 1
+fi
 echo "  Seed data loaded."
 
 deactivate
