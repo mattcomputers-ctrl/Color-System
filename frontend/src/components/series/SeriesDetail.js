@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Card, Table, Button, Modal, Form, Spinner, Badge, Row, Col } from 'react-bootstrap';
 import { toast } from 'react-toastify';
 import { seriesAPI, basesAPI } from '../../services/api';
@@ -7,12 +7,17 @@ import { labToApproxHex, formatDate } from '../../utils/helpers';
 
 function SeriesDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [series, setSeries] = useState(null);
   const [bases, setBases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showBaseModal, setShowBaseModal] = useState(false);
+  const [editBase, setEditBase] = useState(null);
   const [baseForm, setBaseForm] = useState({ code: '', name: '', color_index: '', notes: '' });
   const [saving, setSaving] = useState(false);
+  const [showEditSeries, setShowEditSeries] = useState(false);
+  const [seriesForm, setSeriesForm] = useState({ name: '', description: '' });
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // 'series' | base_id | null
 
   const loadData = async () => {
     try {
@@ -31,19 +36,77 @@ function SeriesDetail() {
 
   useEffect(() => { loadData(); }, [id]);
 
-  const handleCreateBase = async (e) => {
+  // --- Base CRUD ---
+  const openBaseModal = (base = null) => {
+    if (base) {
+      setEditBase(base);
+      setBaseForm({ code: base.code, name: base.name, color_index: base.color_index || '', notes: base.notes || '' });
+    } else {
+      setEditBase(null);
+      setBaseForm({ code: '', name: '', color_index: '', notes: '' });
+    }
+    setShowBaseModal(true);
+  };
+
+  const handleSaveBase = async (e) => {
     e.preventDefault();
     setSaving(true);
     try {
-      await basesAPI.create(id, baseForm);
-      toast.success('Mixing base created');
+      if (editBase) {
+        await basesAPI.update(editBase.id, baseForm);
+        toast.success('Base updated');
+      } else {
+        await basesAPI.create(id, baseForm);
+        toast.success('Mixing base created');
+      }
       setShowBaseModal(false);
-      setBaseForm({ code: '', name: '', color_index: '', notes: '' });
       loadData();
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to create base');
+      toast.error(err.response?.data?.error || 'Failed to save base');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteBase = async (baseId) => {
+    try {
+      await basesAPI.delete(baseId);
+      toast.success('Base deleted');
+      setDeleteConfirm(null);
+      loadData();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to delete base');
+    }
+  };
+
+  // --- Series CRUD ---
+  const openEditSeries = () => {
+    setSeriesForm({ name: series.name, description: series.description || '' });
+    setShowEditSeries(true);
+  };
+
+  const handleUpdateSeries = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await seriesAPI.update(id, seriesForm);
+      toast.success('Series updated');
+      setShowEditSeries(false);
+      loadData();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to update series');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteSeries = async () => {
+    try {
+      await seriesAPI.delete(id);
+      toast.success('Series deleted');
+      navigate('/series');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to delete series');
     }
   };
 
@@ -59,7 +122,17 @@ function SeriesDetail() {
             <li className="breadcrumb-item active">{series.code}</li>
           </ol>
         </nav>
-        <h2>{series.name}</h2>
+        <div className="d-flex justify-content-between align-items-center">
+          <h2>{series.name}</h2>
+          <div>
+            <Button variant="outline-primary" size="sm" className="me-2" onClick={openEditSeries}>
+              Edit Series
+            </Button>
+            <Button variant="outline-danger" size="sm" onClick={() => setDeleteConfirm('series')}>
+              Delete Series
+            </Button>
+          </div>
+        </div>
         {series.description && <p className="text-muted">{series.description}</p>}
       </div>
 
@@ -83,7 +156,7 @@ function SeriesDetail() {
       <Card>
         <Card.Header className="d-flex justify-content-between align-items-center">
           <strong>Mixing Bases</strong>
-          <Button variant="primary" size="sm" onClick={() => setShowBaseModal(true)}>
+          <Button variant="primary" size="sm" onClick={() => openBaseModal()}>
             + Add Base
           </Button>
         </Card.Header>
@@ -93,7 +166,7 @@ function SeriesDetail() {
               <tr>
                 <th>Color</th><th>Code</th><th>Name</th>
                 <th>Color Index</th><th>Concentrations</th>
-                <th>LAB</th><th>Status</th>
+                <th>LAB</th><th>Status</th><th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -120,11 +193,19 @@ function SeriesDetail() {
                         {b.is_active ? 'Active' : 'Inactive'}
                       </Badge>
                     </td>
+                    <td>
+                      <Button variant="outline-primary" size="sm" className="me-1" onClick={() => openBaseModal(b)}>
+                        Edit
+                      </Button>
+                      <Button variant="outline-danger" size="sm" onClick={() => setDeleteConfirm(b.id)}>
+                        Delete
+                      </Button>
+                    </td>
                   </tr>
                 );
               })}
               {bases.length === 0 && (
-                <tr><td colSpan="7" className="text-center text-muted p-4">
+                <tr><td colSpan="8" className="text-center text-muted p-4">
                   No mixing bases yet. Add one to get started.
                 </td></tr>
               )}
@@ -133,9 +214,12 @@ function SeriesDetail() {
         </Card.Body>
       </Card>
 
+      {/* Add/Edit Base Modal */}
       <Modal show={showBaseModal} onHide={() => setShowBaseModal(false)}>
-        <Modal.Header closeButton><Modal.Title>Add Mixing Base</Modal.Title></Modal.Header>
-        <Form onSubmit={handleCreateBase}>
+        <Modal.Header closeButton>
+          <Modal.Title>{editBase ? 'Edit Mixing Base' : 'Add Mixing Base'}</Modal.Title>
+        </Modal.Header>
+        <Form onSubmit={handleSaveBase}>
           <Modal.Body>
             <Form.Group className="mb-3">
               <Form.Label>Base Code</Form.Label>
@@ -175,10 +259,62 @@ function SeriesDetail() {
           <Modal.Footer>
             <Button variant="secondary" onClick={() => setShowBaseModal(false)}>Cancel</Button>
             <Button type="submit" variant="primary" disabled={saving}>
-              {saving ? 'Creating...' : 'Add Base'}
+              {saving ? 'Saving...' : editBase ? 'Save Changes' : 'Add Base'}
             </Button>
           </Modal.Footer>
         </Form>
+      </Modal>
+
+      {/* Edit Series Modal */}
+      <Modal show={showEditSeries} onHide={() => setShowEditSeries(false)}>
+        <Modal.Header closeButton><Modal.Title>Edit Series</Modal.Title></Modal.Header>
+        <Form onSubmit={handleUpdateSeries}>
+          <Modal.Body>
+            <Form.Group className="mb-3">
+              <Form.Label>Name</Form.Label>
+              <Form.Control
+                value={seriesForm.name}
+                onChange={e => setSeriesForm({ ...seriesForm, name: e.target.value })}
+                required
+              />
+            </Form.Group>
+            <Form.Group>
+              <Form.Label>Description</Form.Label>
+              <Form.Control
+                as="textarea" rows={3}
+                value={seriesForm.description}
+                onChange={e => setSeriesForm({ ...seriesForm, description: e.target.value })}
+              />
+            </Form.Group>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="secondary" onClick={() => setShowEditSeries(false)}>Cancel</Button>
+            <Button type="submit" variant="primary" disabled={saving}>
+              {saving ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </Modal.Footer>
+        </Form>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal show={deleteConfirm !== null} onHide={() => setDeleteConfirm(null)}>
+        <Modal.Header closeButton><Modal.Title>Confirm Delete</Modal.Title></Modal.Header>
+        <Modal.Body>
+          {deleteConfirm === 'series' ? (
+            <p>Are you sure you want to delete series <strong>{series.code}</strong>? This will deactivate the series and all its bases.</p>
+          ) : (
+            <p>Are you sure you want to delete base <strong>{bases.find(b => b.id === deleteConfirm)?.code}</strong>? This will permanently remove the base and all its spectral data.</p>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
+          <Button
+            variant="danger"
+            onClick={() => deleteConfirm === 'series' ? handleDeleteSeries() : handleDeleteBase(deleteConfirm)}
+          >
+            Delete
+          </Button>
+        </Modal.Footer>
       </Modal>
     </div>
   );

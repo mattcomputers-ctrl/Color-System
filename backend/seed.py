@@ -165,37 +165,28 @@ def seed():
                 print(f'  Created base {series_code}/{code} ({name}) '
                       f'L*={lab[0]:.1f} a*={lab[1]:.1f} b*={lab[2]:.1f}')
 
-        # Create sample Pantone targets with approximate LAB values
-        # NOTE: These are NOT official Pantone values. Real Pantone spectral data
-        # must be imported from licensed Pantone sources.
-        pantone_samples = [
-            ('185 C', 'PANTONE 185 C', 48.04, 69.45, 42.23),
-            ('286 C', 'PANTONE 286 C', 26.66, 18.56, -62.85),
-            ('354 C', 'PANTONE 354 C', 52.76, -55.34, 35.21),
-            ('109 C', 'PANTONE 109 C', 84.78, 2.63, 86.59),
-            ('021 C', 'PANTONE 021 C', 60.81, 55.27, 72.98),
-            ('2685 C', 'PANTONE 2685 C', 21.09, 40.63, -63.91),
-            ('Black C', 'PANTONE Black C', 19.92, 0.34, -0.82),
-            ('Warm Red C', 'PANTONE Warm Red C', 50.42, 63.92, 47.17),
-            ('Reflex Blue C', 'PANTONE Reflex Blue C', 20.75, 22.43, -63.43),
-            ('Rubine Red C', 'PANTONE Rubine Red C', 40.98, 63.27, 6.17),
-        ]
+        # Load complete Pantone color library (Coated, Uncoated, Pastels & Neons)
+        from pantone_data import PANTONE_COLORS
 
-        for code, name, l, a, b in pantone_samples:
-            existing = PantoneTarget.query.filter_by(pantone_code=code, library='PMS').first()
+        added = 0
+        for code, name, library, l, a, b in PANTONE_COLORS:
+            existing = PantoneTarget.query.filter_by(pantone_code=code, library=library).first()
             if not existing:
                 target = PantoneTarget(
                     pantone_code=code,
                     pantone_name=name,
-                    library='PMS',
+                    library=library,
                     lab_l=l,
                     lab_a=a,
                     lab_b=b,
-                    source='Approximate values — for demonstration only. '
+                    source='Community-reference LAB approximations. '
                            'Import official Pantone data for production use.',
                 )
                 db.session.add(target)
-                print(f'  Created Pantone target: {code}')
+                added += 1
+
+        print(f'  Loaded {added} new Pantone targets '
+              f'({len(PANTONE_COLORS)} total in library)')
 
         db.session.commit()
         print('Seed data loaded successfully.')

@@ -354,6 +354,136 @@ def formulate():
     return jsonify({'formula': fd}), 201
 
 
+@pantone_bp.route('/formulate-all', methods=['POST'])
+@role_required('admin', 'formulator')
+def formulate_all():
+    """Generate formulas for ALL Pantone targets in a given series.
+
+    Request body:
+        series_id: int — Ink series to use
+        library: str (optional) — Filter targets by library (default: all)
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Request body required'}), 400
+
+    series_id = data.get('series_id')
+    if not series_id:
+        return jsonify({'error': 'series_id is required'}), 400
+
+    series = db.session.get(InkSeries, series_id)
+    if not series:
+        return jsonify({'error': 'Ink series not found'}), 404
+
+    # Load colorants once for the whole batch
+    colorants, substrate_ks = _load_series_colorants(series_id)
+    if not colorants:
+        return jsonify({'error': 'No bases with spectral data in this series'}), 400
+
+    # Get all active targets
+    query = PantoneTarget.query.filter_by(is_active=True)
+    library = data.get('library')
+    if library:
+        query = query.filter_by(library=library)
+    targets = query.all()
+
+    if not targets:
+        return jsonify({'error': 'No Pantone targets found'}), 400
+
+    user = get_current_user()
+    engine = FormulationEngine()
+
+    results = []
+    succeeded = 0
+    failed = 0
+
+    for target in targets:
+        target_reflectance = None
+        target_lab = None
+        if target.spectral_reflectance:
+            target_reflectance = np.array(target.spectral_reflectance)
+        elif target.lab_l is not None:
+            target_lab = (target.lab_l, target.lab_a, target.lab_b)
+        else:
+            failed += 1
+            continue
+
+        try:
+            result = engine.formulate(
+                target_reflectance=target_reflectance,
+                target_lab=target_lab,
+                colorants=colorants,
+                substrate_ks=substrate_ks,
+            )
+        except Exception as e:
+            logger.warning(f'Formulation failed for {target.pantone_code}: {e}')
+            failed += 1
+            continue
+
+        if not result.success:
+            failed += 1
+            continue
+
+        # Get next version
+        existing = PantoneFormula.query.filter_by(
+            target_id=target.id, series_id=series_id, is_current=True
+        ).first()
+        next_version = (existing.version + 1) if existing else 1
+        if existing:
+            existing.is_current = False
+
+        formula = PantoneFormula(
+            target_id=target.id,
+            series_id=series_id,
+            version=next_version,
+            predicted_spectral=result.predicted_reflectance.tolist(),
+            predicted_lab_l=float(result.predicted_lab[0]),
+            predicted_lab_a=float(result.predicted_lab[1]),
+            predicted_lab_b=float(result.predicted_lab[2]),
+            delta_e_76=result.delta_e_76,
+            delta_e_2000=result.delta_e_2000,
+            generated_by_id=user.id,
+            is_current=True,
+        )
+        db.session.add(formula)
+        db.session.flush()
+
+        for comp in result.components:
+            fc = PantoneFormulaComponent(
+                formula_id=formula.id,
+                base_id=comp.base_id,
+                percentage=comp.percentage,
+                weight_grams=comp.weight_grams,
+            )
+            db.session.add(fc)
+
+        succeeded += 1
+        results.append({
+            'target_code': target.pantone_code,
+            'delta_e_2000': result.delta_e_2000,
+            'formula_id': formula.id,
+        })
+
+    AuditLog.log(
+        user.id, 'bulk_formulate_pantone', 'pantone_formula',
+        details={
+            'series_code': series.code,
+            'total_targets': len(targets),
+            'succeeded': succeeded,
+            'failed': failed,
+        }
+    )
+    db.session.commit()
+
+    return jsonify({
+        'message': f'Generated {succeeded} formulas ({failed} failed)',
+        'succeeded': succeeded,
+        'failed': failed,
+        'total': len(targets),
+        'results': results,
+    }), 201
+
+
 @pantone_bp.route('/formulas/<int:formula_id>/approve', methods=['POST'])
 @role_required('admin', 'formulator')
 def approve_formula(formula_id):

@@ -57,6 +57,7 @@ export const basesAPI = {
   get: (id) => api.get(`/bases/${id}`),
   create: (seriesId, data) => api.post(`/bases/series/${seriesId}`, data),
   update: (id, data) => api.put(`/bases/${id}`, data),
+  delete: (id) => api.delete(`/bases/${id}`),
   addConcentration: (baseId, data) => api.post(`/bases/${baseId}/concentrations`, data),
   uploadCxf: (concId, file) => {
     const formData = new FormData();
@@ -83,6 +84,8 @@ export const pantoneAPI = {
   getFormula: (id) => api.get(`/pantone/formulas/${id}`),
   formulate: (targetId, seriesId) =>
     api.post('/pantone/formulate', { target_id: targetId, series_id: seriesId }),
+  formulateAll: (seriesId, library = null) =>
+    api.post('/pantone/formulate-all', { series_id: seriesId, library }, { timeout: 600000 }),
   approveFormula: (id, notes = '') =>
     api.post(`/pantone/formulas/${id}/approve`, { notes }),
 };

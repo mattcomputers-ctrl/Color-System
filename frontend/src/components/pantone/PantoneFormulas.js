@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Table, Button, Form, Spinner, InputGroup, Badge, Row, Col } from 'react-bootstrap';
+import { Card, Table, Button, Form, Spinner, InputGroup, Badge, Row, Col, Modal, ProgressBar } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { pantoneAPI, seriesAPI, exportAPI } from '../../services/api';
@@ -13,6 +13,12 @@ function PantoneFormulas() {
   const [seriesFilter, setSeriesFilter] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+
+  // Bulk generation state
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkSeriesId, setBulkSeriesId] = useState('');
+  const [bulkRunning, setBulkRunning] = useState(false);
+  const [bulkResult, setBulkResult] = useState(null);
 
   useEffect(() => {
     seriesAPI.list({ active_only: 'true' }).then(res => setSeries(res.data.series));
@@ -46,11 +52,33 @@ function PantoneFormulas() {
     }
   };
 
+  const handleBulkFormulate = async () => {
+    if (!bulkSeriesId) {
+      toast.error('Select a series first');
+      return;
+    }
+    setBulkRunning(true);
+    setBulkResult(null);
+    try {
+      const res = await pantoneAPI.formulateAll(parseInt(bulkSeriesId));
+      setBulkResult(res.data);
+      toast.success(res.data.message);
+      loadFormulas();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Bulk formulation failed');
+    } finally {
+      setBulkRunning(false);
+    }
+  };
+
   return (
     <div>
       <div className="page-header d-flex justify-content-between align-items-center">
         <h2>Pantone Formulas</h2>
         <div>
+          <Button variant="outline-success" className="me-2" onClick={() => setShowBulkModal(true)}>
+            Generate All
+          </Button>
           <Button variant="outline-secondary" className="me-2" onClick={handleExportExcel}>
             Export Excel
           </Button>
@@ -148,6 +176,105 @@ function PantoneFormulas() {
           </Card.Footer>
         )}
       </Card>
+
+      {/* Bulk Generate Modal */}
+      <Modal show={showBulkModal} onHide={() => { if (!bulkRunning) setShowBulkModal(false); }} size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>Generate Formulas for All Pantone Colors</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {!bulkResult && !bulkRunning && (
+            <>
+              <p>This will generate best-match formulas for every Pantone target color using the selected ink series. Existing formulas will be versioned (not overwritten).</p>
+              <Form.Group className="mb-3">
+                <Form.Label>Ink Series</Form.Label>
+                <Form.Select
+                  value={bulkSeriesId}
+                  onChange={e => setBulkSeriesId(e.target.value)}
+                >
+                  <option value="">Select a series...</option>
+                  {series.map(s => (
+                    <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
+                  ))}
+                </Form.Select>
+              </Form.Group>
+              <p className="text-muted small">
+                This may take several minutes depending on the number of targets and system speed.
+              </p>
+            </>
+          )}
+
+          {bulkRunning && (
+            <div className="text-center py-4">
+              <Spinner animation="border" className="mb-3" />
+              <p>Generating formulas for all Pantone targets...</p>
+              <p className="text-muted small">This may take a few minutes. Please wait.</p>
+              <ProgressBar animated now={100} />
+            </div>
+          )}
+
+          {bulkResult && (
+            <div>
+              <div className="text-center mb-3">
+                <h4 className="text-success">{bulkResult.message}</h4>
+              </div>
+              <Row className="mb-3">
+                <Col>
+                  <Card className="text-center p-3 bg-light">
+                    <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{bulkResult.total}</div>
+                    <div className="text-muted">Total Targets</div>
+                  </Card>
+                </Col>
+                <Col>
+                  <Card className="text-center p-3 bg-light">
+                    <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#28a745' }}>{bulkResult.succeeded}</div>
+                    <div className="text-muted">Succeeded</div>
+                  </Card>
+                </Col>
+                <Col>
+                  <Card className="text-center p-3 bg-light">
+                    <div style={{ fontSize: '2rem', fontWeight: 'bold', color: bulkResult.failed > 0 ? '#dc3545' : '#6c757d' }}>{bulkResult.failed}</div>
+                    <div className="text-muted">Failed</div>
+                  </Card>
+                </Col>
+              </Row>
+              {bulkResult.results?.length > 0 && (
+                <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+                  <Table size="sm" hover>
+                    <thead>
+                      <tr><th>Target</th><th>DE*00</th></tr>
+                    </thead>
+                    <tbody>
+                      {bulkResult.results.map((r, i) => (
+                        <tr key={i}>
+                          <td>{r.target_code}</td>
+                          <td>
+                            <span className={`delta-e-badge ${getDeltaEClass(r.delta_e_2000)}`}>
+                              {r.delta_e_2000?.toFixed(2)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          {!bulkRunning && (
+            <Button variant="secondary" onClick={() => { setShowBulkModal(false); setBulkResult(null); }}>
+              {bulkResult ? 'Close' : 'Cancel'}
+            </Button>
+          )}
+          {!bulkResult && !bulkRunning && (
+            <Button variant="success" onClick={handleBulkFormulate} disabled={!bulkSeriesId}>
+              Generate All Formulas
+            </Button>
+          )}
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 }

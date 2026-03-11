@@ -107,6 +107,13 @@ def update_base(base_id):
 
     if 'name' in data:
         base.name = data['name'].strip()
+    if 'code' in data:
+        new_code = data['code'].strip()
+        if new_code and new_code != base.code:
+            existing = MixingBase.query.filter_by(series_id=base.series_id, code=new_code).first()
+            if existing:
+                return jsonify({'error': f'Base "{new_code}" already exists in this series'}), 409
+            base.code = new_code
     if 'color_index' in data:
         base.color_index = data['color_index'].strip() or None
     if 'notes' in data:
@@ -119,6 +126,24 @@ def update_base(base_id):
     db.session.commit()
 
     return jsonify({'base': base.to_dict(include_concentrations=True)})
+
+
+@bases_bp.route('/<int:base_id>', methods=['DELETE'])
+@role_required('admin')
+def delete_base(base_id):
+    """Delete a mixing base and all its concentrations/spectral data."""
+    base = db.session.get(MixingBase, base_id)
+    if not base:
+        return jsonify({'error': 'Mixing base not found'}), 404
+
+    user = get_current_user()
+    AuditLog.log(user.id, 'delete_base', 'base', base.id,
+                 details={'code': base.code, 'series_id': base.series_id})
+
+    db.session.delete(base)
+    db.session.commit()
+
+    return jsonify({'message': f'Base "{base.code}" deleted'})
 
 
 @bases_bp.route('/<int:base_id>/concentrations', methods=['POST'])

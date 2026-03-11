@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Card, Table, Button, Modal, Form, Spinner, Row, Col, Alert } from 'react-bootstrap';
 import { toast } from 'react-toastify';
 import { useDropzone } from 'react-dropzone';
@@ -8,6 +8,7 @@ import { labToApproxHex, formatDate } from '../../utils/helpers';
 
 function BaseDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [base, setBase] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showConcModal, setShowConcModal] = useState(false);
@@ -16,6 +17,12 @@ function BaseDetail() {
   const [uploading, setUploading] = useState(false);
   const [spectralHistory, setSpectralHistory] = useState([]);
   const [showHistory, setShowHistory] = useState(null);
+
+  // Edit/delete state
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({ code: '', name: '', color_index: '', notes: '' });
+  const [saving, setSaving] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const loadBase = async () => {
     try {
@@ -80,6 +87,43 @@ function BaseDetail() {
     }
   };
 
+  // Edit base
+  const openEditModal = () => {
+    setEditForm({
+      code: base.code,
+      name: base.name,
+      color_index: base.color_index || '',
+      notes: base.notes || '',
+    });
+    setShowEditModal(true);
+  };
+
+  const handleEditBase = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await basesAPI.update(id, editForm);
+      toast.success('Base updated');
+      setShowEditModal(false);
+      loadBase();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to update base');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Delete base
+  const handleDeleteBase = async () => {
+    try {
+      await basesAPI.delete(id);
+      toast.success('Base deleted');
+      navigate(`/series/${base.series_id}`);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to delete base');
+    }
+  };
+
   if (loading) return <div className="text-center mt-5"><Spinner animation="border" /></div>;
   if (!base) return <p>Base not found.</p>;
 
@@ -95,16 +139,26 @@ function BaseDetail() {
             <li className="breadcrumb-item active">{base.code}</li>
           </ol>
         </nav>
-        <div className="d-flex align-items-center gap-3">
-          {lab && (
-            <div className="color-swatch" style={{
-              backgroundColor: labToApproxHex(lab.L, lab.a, lab.b),
-              width: 48, height: 48
-            }} />
-          )}
+        <div className="d-flex justify-content-between align-items-center">
+          <div className="d-flex align-items-center gap-3">
+            {lab && (
+              <div className="color-swatch" style={{
+                backgroundColor: labToApproxHex(lab.L, lab.a, lab.b),
+                width: 48, height: 48
+              }} />
+            )}
+            <div>
+              <h2 className="mb-0">{base.name} ({base.code})</h2>
+              {base.color_index && <span className="text-muted">{base.color_index}</span>}
+            </div>
+          </div>
           <div>
-            <h2 className="mb-0">{base.name} ({base.code})</h2>
-            {base.color_index && <span className="text-muted">{base.color_index}</span>}
+            <Button variant="outline-primary" size="sm" className="me-2" onClick={openEditModal}>
+              Edit Base
+            </Button>
+            <Button variant="outline-danger" size="sm" onClick={() => setShowDeleteConfirm(true)}>
+              Delete Base
+            </Button>
           </div>
         </div>
       </div>
@@ -248,6 +302,65 @@ function BaseDetail() {
             <Button type="submit" variant="primary">Add</Button>
           </Modal.Footer>
         </Form>
+      </Modal>
+
+      {/* Edit Base Modal */}
+      <Modal show={showEditModal} onHide={() => setShowEditModal(false)}>
+        <Modal.Header closeButton><Modal.Title>Edit Base</Modal.Title></Modal.Header>
+        <Form onSubmit={handleEditBase}>
+          <Modal.Body>
+            <Form.Group className="mb-3">
+              <Form.Label>Base Code</Form.Label>
+              <Form.Control
+                value={editForm.code}
+                onChange={e => setEditForm({ ...editForm, code: e.target.value })}
+                required
+              />
+            </Form.Group>
+            <Form.Group className="mb-3">
+              <Form.Label>Name</Form.Label>
+              <Form.Control
+                value={editForm.name}
+                onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                required
+              />
+            </Form.Group>
+            <Form.Group className="mb-3">
+              <Form.Label>Color Index</Form.Label>
+              <Form.Control
+                value={editForm.color_index}
+                onChange={e => setEditForm({ ...editForm, color_index: e.target.value })}
+              />
+            </Form.Group>
+            <Form.Group>
+              <Form.Label>Notes</Form.Label>
+              <Form.Control
+                as="textarea" rows={2}
+                value={editForm.notes}
+                onChange={e => setEditForm({ ...editForm, notes: e.target.value })}
+              />
+            </Form.Group>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="secondary" onClick={() => setShowEditModal(false)}>Cancel</Button>
+            <Button type="submit" variant="primary" disabled={saving}>
+              {saving ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </Modal.Footer>
+        </Form>
+      </Modal>
+
+      {/* Delete Confirmation */}
+      <Modal show={showDeleteConfirm} onHide={() => setShowDeleteConfirm(false)}>
+        <Modal.Header closeButton><Modal.Title>Confirm Delete</Modal.Title></Modal.Header>
+        <Modal.Body>
+          Are you sure you want to delete base <strong>{base.code}</strong>?
+          This will permanently remove the base and all its spectral data.
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowDeleteConfirm(false)}>Cancel</Button>
+          <Button variant="danger" onClick={handleDeleteBase}>Delete</Button>
+        </Modal.Footer>
       </Modal>
     </div>
   );
