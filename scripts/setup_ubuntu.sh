@@ -232,6 +232,17 @@ export FLASK_APP=wsgi.py
 export FLASK_ENV=production
 export DATABASE_URL="postgresql://${DB_USER}:${DB_PASS}@localhost:5432/${DB_NAME}"
 
+# Clean slate: drop all existing tables so the installer is safely re-runnable.
+# This handles re-installs where a previous attempt left partial schema or a
+# stale alembic_version referencing migration files that no longer exist.
+echo "  Resetting database schema (safe re-install)..."
+sudo -u postgres psql -d "${DB_NAME}" -c "
+    DROP SCHEMA public CASCADE;
+    CREATE SCHEMA public;
+    GRANT ALL ON SCHEMA public TO ${DB_USER};
+    ALTER SCHEMA public OWNER TO ${DB_USER};
+" > /dev/null 2>&1
+
 # The repo ships with migrations/ (alembic.ini, env.py, script.py.mako)
 # but no version files. Ensure the versions directory exists and is clean
 # so flask db migrate generates a fresh initial migration.
