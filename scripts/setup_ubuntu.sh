@@ -229,20 +229,20 @@ cd "${APP_DIR}/backend"
 export FLASK_APP=wsgi.py
 export FLASK_ENV=production
 
-# Ensure the migrations/versions directory exists
+# The repo ships with migrations/ (alembic.ini, env.py, script.py.mako)
+# but no version files. Ensure the versions directory exists and is clean
+# so flask db migrate generates a fresh initial migration.
 mkdir -p "${APP_DIR}/backend/migrations/versions"
+rm -f "${APP_DIR}/backend/migrations/versions/"*.py 2>/dev/null || true
 
-# Initialize Alembic if not already done
-flask db init > /dev/null 2>&1 || true
-
-# Generate initial migration and apply
+# Generate and apply migrations
 echo "  Running migrations..."
-flask db migrate -m "Initial schema" > /dev/null 2>&1 || true
-flask db upgrade 2>&1 | grep -v "^$" || true
+flask db migrate -m "Initial schema" 2>&1 | tail -3
+flask db upgrade 2>&1 | tail -3
 echo "  Database tables created."
 
 echo "  Loading seed data..."
-python seed.py
+python seed.py 2>&1 | tail -5
 echo "  Seed data loaded."
 
 deactivate
