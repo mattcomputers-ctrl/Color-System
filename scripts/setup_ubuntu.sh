@@ -198,7 +198,7 @@ source venv/bin/activate
 
 pip install --upgrade pip > /dev/null 2>&1
 echo "  Installing Python packages (this takes 1-2 minutes)..."
-pip install -r requirements.txt 2>&1 | grep -E "^(Successfully|ERROR)" || true
+pip install -r requirements.txt
 echo "  Python packages installed."
 
 # ============================================================================
@@ -237,6 +237,15 @@ export DATABASE_URL="postgresql://${DB_USER}:${DB_PASS}@localhost:5432/${DB_NAME
 # so flask db migrate generates a fresh initial migration.
 mkdir -p "${APP_DIR}/backend/migrations/versions"
 rm -f "${APP_DIR}/backend/migrations/versions/"*.py 2>/dev/null || true
+
+# Verify the Flask app can start (catches missing packages early)
+echo "  Verifying app imports..."
+if ! python -c "from app import create_app; create_app()" 2>&1; then
+    echo ""
+    echo "  ERROR: Flask app failed to import. A required Python package may"
+    echo "  have failed to install. Re-run: pip install -r requirements.txt"
+    exit 1
+fi
 
 # Generate and apply migrations
 echo "  Generating migration..."
