@@ -238,6 +238,45 @@ function CustomMatchNew() {
               </Card.Body>
             </Card>
           )}
+
+          {result?.closest_pantone?.length > 0 && (
+            <Card className="mt-3">
+              <Card.Header><strong>Closest Pantone Colors</strong></Card.Header>
+              <Card.Body className="p-0">
+                <Table size="sm" className="mb-0">
+                  <thead>
+                    <tr>
+                      <th style={{ width: 36 }}></th>
+                      <th>Pantone</th>
+                      <th>Library</th>
+                      <th className="text-end">dE*00</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.closest_pantone.map((p, i) => (
+                      <tr key={i}>
+                        <td>
+                          <div style={{
+                            backgroundColor: labToApproxHex(p.lab.L, p.lab.a, p.lab.b),
+                            width: 24, height: 24, borderRadius: 4, border: '1px solid #dee2e6',
+                          }} />
+                        </td>
+                        <td><strong>{p.pantone_code}</strong></td>
+                        <td className="small text-muted">{p.library}</td>
+                        <td className="text-end">
+                          <span className={`delta-e-badge ${getDeltaEClass(p.delta_e_2000)}`}>
+                            {p.delta_e_2000?.toFixed(2)}
+                          </span>
+                        </td>
+                        <td className="small text-muted">{getDeltaELabel(p.delta_e_2000)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              </Card.Body>
+            </Card>
+          )}
         </Col>
       </Row>
     </div>

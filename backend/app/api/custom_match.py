@@ -11,14 +11,36 @@ from app.models.series import InkSeries
 from app.models.upload import UploadedFile
 from app.models.audit import AuditLog
 from app.services.cxf_parser import CxfParser
-from app.services.color_science import spectral_to_lab, reflectance_to_ks
+from app.services.color_science import spectral_to_lab, delta_e_2000, reflectance_to_ks
 from app.services.formulation_engine import FormulationEngine
 from app.api.pantone import _load_series_colorants
 from app.utils.auth import login_required, role_required, get_current_user
 from app.utils.file_handler import allowed_file, save_upload
+from pantone_data import PANTONE_COLORS
 
 logger = logging.getLogger(__name__)
 custom_match_bp = Blueprint('custom_match', __name__)
+
+
+def find_closest_pantone(target_lab, count=5):
+    """Find the closest Pantone colors to a target LAB value.
+
+    Returns a list of dicts sorted by dE00 ascending, each containing:
+    pantone_code, pantone_name, library, lab (L/a/b), delta_e_2000.
+    """
+    target = (float(target_lab[0]), float(target_lab[1]), float(target_lab[2]))
+    scored = []
+    for code, name, library, lab_l, lab_a, lab_b in PANTONE_COLORS:
+        de = delta_e_2000(target, (lab_l, lab_a, lab_b))
+        scored.append({
+            'pantone_code': code,
+            'pantone_name': name,
+            'library': library,
+            'lab': {'L': lab_l, 'a': lab_a, 'b': lab_b},
+            'delta_e_2000': round(de, 4),
+        })
+    scored.sort(key=lambda x: x['delta_e_2000'])
+    return scored[:count]
 
 
 @custom_match_bp.route('/jobs', methods=['GET'])
@@ -68,7 +90,12 @@ def get_job(job_id):
     job = db.session.get(CustomMatchJob, job_id)
     if not job:
         return jsonify({'error': 'Match job not found'}), 404
-    return jsonify({'job': job.to_dict(include_results=True)})
+    job_dict = job.to_dict(include_results=True)
+    if job.target_lab_l is not None:
+        job_dict['closest_pantone'] = find_closest_pantone(
+            (job.target_lab_l, job.target_lab_a, job.target_lab_b), count=5
+        )
+    return jsonify({'job': job_dict})
 
 
 @custom_match_bp.route('/match-lab', methods=['POST'])
@@ -133,7 +160,11 @@ def match_from_lab():
                  details={'series_id': series_id, 'target_lab': [lab_l, lab_a, lab_b]})
     db.session.commit()
 
-    return jsonify({'job': job.to_dict(include_results=True)}), 201
+    job_dict = job.to_dict(include_results=True)
+    job_dict['closest_pantone'] = find_closest_pantone(
+        (float(lab_l), float(lab_a), float(lab_b)), count=5
+    )
+    return jsonify({'job': job_dict}), 201
 
 
 @custom_match_bp.route('/match-cxf', methods=['POST'])
@@ -237,7 +268,12 @@ def match_from_cxf():
                  details={'series_id': series_id, 'filename': file_info['original_filename']})
     db.session.commit()
 
-    return jsonify({'job': job.to_dict(include_results=True)}), 201
+    job_dict = job.to_dict(include_results=True)
+    if lab_l is not None:
+        job_dict['closest_pantone'] = find_closest_pantone(
+            (lab_l, lab_a, lab_b), count=5
+        )
+    return jsonify({'job': job_dict}), 201
 
 
 def _save_match_results(job, formulation_results):

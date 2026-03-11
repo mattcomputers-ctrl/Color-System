@@ -102,6 +102,53 @@ function CustomMatchDetail() {
         </Col>
       </Row>
 
+      {job.closest_pantone?.length > 0 && (
+        <Card className="mb-4">
+          <Card.Header><strong>Closest Pantone Colors</strong></Card.Header>
+          <Card.Body className="p-0">
+            <Table className="mb-0">
+              <thead>
+                <tr>
+                  <th style={{ width: 40 }}></th>
+                  <th>Pantone Code</th>
+                  <th>Name</th>
+                  <th>Library</th>
+                  <th className="text-end">L*</th>
+                  <th className="text-end">a*</th>
+                  <th className="text-end">b*</th>
+                  <th className="text-end">dE*00</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {job.closest_pantone.map((p, i) => (
+                  <tr key={i}>
+                    <td>
+                      <div style={{
+                        backgroundColor: labToApproxHex(p.lab.L, p.lab.a, p.lab.b),
+                        width: 28, height: 28, borderRadius: 4, border: '1px solid #dee2e6',
+                      }} />
+                    </td>
+                    <td><strong>{p.pantone_code}</strong></td>
+                    <td className="small">{p.pantone_name}</td>
+                    <td className="small text-muted">{p.library}</td>
+                    <td className="text-end">{p.lab.L?.toFixed(2)}</td>
+                    <td className="text-end">{p.lab.a?.toFixed(2)}</td>
+                    <td className="text-end">{p.lab.b?.toFixed(2)}</td>
+                    <td className="text-end">
+                      <span className={`delta-e-badge ${getDeltaEClass(p.delta_e_2000)}`}>
+                        {p.delta_e_2000?.toFixed(4)}
+                      </span>
+                    </td>
+                    <td className="small text-muted">{getDeltaELabel(p.delta_e_2000)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          </Card.Body>
+        </Card>
+      )}
+
       {job.results?.map((result, ri) => (
         <Card className="mb-3" key={result.id}>
           <Card.Header>
