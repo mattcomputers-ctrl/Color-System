@@ -11,7 +11,10 @@ from app.models.series import InkSeries
 from app.models.upload import UploadedFile
 from app.models.audit import AuditLog
 from app.services.cxf_parser import CxfParser
-from app.services.color_science import spectral_to_lab, delta_e_2000, reflectance_to_ks, metamerism_index
+from app.services.color_science import (
+    spectral_to_lab, delta_e_2000, reflectance_to_ks, metamerism_index,
+    compute_lab_multi_condition, OBSERVERS, MEASUREMENT_FILTERS,
+)
 from app.services.formulation_engine import FormulationEngine
 from app.api.pantone import _load_series_colorants
 from app.utils.auth import login_required, role_required, get_current_user
@@ -95,14 +98,27 @@ def get_job(job_id):
         job_dict['closest_pantone'] = find_closest_pantone(
             (job.target_lab_l, job.target_lab_a, job.target_lab_b), count=5
         )
-    # Add metamerism data for results with spectral data
+    # Get observer and filter from query params
+    observer = request.args.get('observer', '2')
+    measurement_filter = request.args.get('filter')
+    if observer not in OBSERVERS:
+        observer = '2'
+    if measurement_filter and measurement_filter not in MEASUREMENT_FILTERS:
+        measurement_filter = None
+
+    # Add metamerism and multi-condition data for results with spectral data
     if job.target_spectral and job_dict.get('results'):
         target_R = np.array(job.target_spectral)
+        job_dict['target_multi_condition'] = compute_lab_multi_condition(target_R)
         for result_dict in job_dict['results']:
             if result_dict.get('predicted_spectral'):
                 try:
                     predicted_R = np.array(result_dict['predicted_spectral'])
-                    result_dict['metamerism'] = metamerism_index(target_R, predicted_R)
+                    result_dict['metamerism'] = metamerism_index(
+                        target_R, predicted_R,
+                        observer=observer, measurement_filter=measurement_filter
+                    )
+                    result_dict['multi_condition_lab'] = compute_lab_multi_condition(predicted_R)
                 except Exception:
                     pass
     return jsonify({'job': job_dict})

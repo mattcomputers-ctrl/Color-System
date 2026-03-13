@@ -12,7 +12,11 @@ from app.models.base import MixingBase, MixingBaseConcentration, BaseSpectralDat
 from app.models.upload import UploadedFile
 from app.models.audit import AuditLog
 from app.services.cxf_parser import CxfParser
-from app.services.color_science import spectral_to_lab, reflectance_to_ks, metamerism_index
+from app.services.color_science import (
+    spectral_to_lab, reflectance_to_ks, metamerism_index,
+    compute_lab_multi_condition, spectral_to_lab_full,
+    OBSERVERS, MEASUREMENT_FILTERS,
+)
 from app.services.formulation_engine import FormulationEngine, ColorantData
 from app.utils.auth import login_required, role_required, get_current_user
 from app.utils.file_handler import allowed_file, save_upload
@@ -245,13 +249,38 @@ def get_formula(formula_id):
     fd['target'] = formula.target.to_dict() if formula.target else None
     fd['series_name'] = formula.series.name if formula.series else None
 
+    # Get observer and filter from query params
+    observer = request.args.get('observer', '2')
+    measurement_filter = request.args.get('filter')
+    if observer not in OBSERVERS:
+        observer = '2'
+    if measurement_filter and measurement_filter not in MEASUREMENT_FILTERS:
+        measurement_filter = None
+
     # Compute metamerism if both target and predicted spectral data exist
     target = formula.target
     if (target and target.spectral_reflectance and formula.predicted_spectral):
         try:
             target_R = np.array(target.spectral_reflectance)
             predicted_R = np.array(formula.predicted_spectral)
-            fd['metamerism'] = metamerism_index(target_R, predicted_R)
+            fd['metamerism'] = metamerism_index(
+                target_R, predicted_R,
+                observer=observer, measurement_filter=measurement_filter
+            )
+            # Multi-condition LAB for the predicted color
+            fd['multi_condition_lab'] = compute_lab_multi_condition(predicted_R)
+        except Exception:
+            pass
+
+    # Recompute LAB under requested observer/filter if spectral data exists
+    if formula.predicted_spectral and (observer != '2' or measurement_filter):
+        try:
+            predicted_R = np.array(formula.predicted_spectral)
+            lab = spectral_to_lab_full(predicted_R, 'D50', observer, measurement_filter)
+            fd['predicted_lab_custom'] = {
+                'L': round(lab[0], 2), 'a': round(lab[1], 2), 'b': round(lab[2], 2),
+                'observer': observer, 'filter': measurement_filter,
+            }
         except Exception:
             pass
 

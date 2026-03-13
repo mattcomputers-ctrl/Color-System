@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Card, Table, Button, Spinner, Row, Col, Badge } from 'react-bootstrap';
 import { toast } from 'react-toastify';
@@ -6,18 +6,39 @@ import { pantoneAPI, exportAPI } from '../../services/api';
 import { labToApproxHex, getDeltaEClass, getDeltaELabel, formatDate, downloadBlob } from '../../utils/helpers';
 import SpectralChart from '../common/SpectralChart';
 import MetamerismPanel from '../common/MetamerismPanel';
+import ObserverFilterSelect from '../common/ObserverFilterSelect';
+import MultiConditionLab from '../common/MultiConditionLab';
 
 function FormulaDetail() {
   const { id } = useParams();
   const [formula, setFormula] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [observer, setObserver] = useState('2');
+  const [filter, setFilter] = useState(null);
+
+  const fetchFormula = useCallback((obs, flt) => {
+    const params = {};
+    if (obs && obs !== '2') params.observer = obs;
+    if (flt) params.filter = flt;
+    return pantoneAPI.getFormula(id, { params })
+      .then(res => setFormula(res.data.formula))
+      .catch(() => toast.error('Failed to load formula'));
+  }, [id]);
 
   useEffect(() => {
-    pantoneAPI.getFormula(id)
-      .then(res => setFormula(res.data.formula))
-      .catch(() => toast.error('Failed to load formula'))
+    fetchFormula(observer, filter)
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleObserverChange = (value) => {
+    setObserver(value);
+    fetchFormula(value, filter);
+  };
+
+  const handleFilterChange = (value) => {
+    setFilter(value);
+    fetchFormula(observer, value);
+  };
 
   const handleApprove = async () => {
     try {
@@ -155,6 +176,22 @@ function FormulaDetail() {
           </Card>
         </Col>
       </Row>
+
+      <Card className="mb-4">
+        <Card.Header><strong>Viewing Conditions</strong></Card.Header>
+        <Card.Body>
+          <ObserverFilterSelect
+            observer={observer}
+            filter={filter}
+            onObserverChange={handleObserverChange}
+            onFilterChange={handleFilterChange}
+          />
+        </Card.Body>
+      </Card>
+
+      {formula.multi_condition_lab && (
+        <MultiConditionLab conditions={formula.multi_condition_lab} title="Multi-Condition LAB Values" />
+      )}
 
       {/* Spectral Comparison Chart */}
       {(formula.predicted_spectral || target.spectral_reflectance) && (

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Card, Table, Button, Spinner, Row, Col, Badge } from 'react-bootstrap';
 import { toast } from 'react-toastify';
@@ -6,18 +6,39 @@ import { customMatchAPI, exportAPI } from '../../services/api';
 import { labToApproxHex, getDeltaEClass, getDeltaELabel, formatDate, downloadBlob } from '../../utils/helpers';
 import SpectralChart from '../common/SpectralChart';
 import MetamerismPanel from '../common/MetamerismPanel';
+import ObserverFilterSelect from '../common/ObserverFilterSelect';
+import MultiConditionLab from '../common/MultiConditionLab';
 
 function CustomMatchDetail() {
   const { id } = useParams();
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [observer, setObserver] = useState('2');
+  const [filter, setFilter] = useState(null);
+
+  const fetchJob = useCallback((obs, flt) => {
+    const params = {};
+    if (obs && obs !== '2') params.observer = obs;
+    if (flt) params.filter = flt;
+    return customMatchAPI.getJob(id, { params })
+      .then(res => setJob(res.data.job))
+      .catch(() => toast.error('Failed to load match job'));
+  }, [id]);
 
   useEffect(() => {
-    customMatchAPI.getJob(id)
-      .then(res => setJob(res.data.job))
-      .catch(() => toast.error('Failed to load match job'))
+    fetchJob(observer, filter)
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleObserverChange = (value) => {
+    setObserver(value);
+    fetchJob(value, filter);
+  };
+
+  const handleFilterChange = (value) => {
+    setFilter(value);
+    fetchJob(observer, value);
+  };
 
   const handleExportPdf = async () => {
     try {
@@ -149,6 +170,26 @@ function CustomMatchDetail() {
             </Table>
           </Card.Body>
         </Card>
+      )}
+
+      <Card className="mb-4">
+        <Card.Header><strong>Viewing Conditions</strong></Card.Header>
+        <Card.Body>
+          <ObserverFilterSelect
+            observer={observer}
+            filter={filter}
+            onObserverChange={handleObserverChange}
+            onFilterChange={handleFilterChange}
+          />
+        </Card.Body>
+      </Card>
+
+      {job.target_multi_condition && (
+        <MultiConditionLab conditions={job.target_multi_condition} title="Target — Multi-Condition LAB" />
+      )}
+
+      {job.results?.[0]?.multi_condition_lab && (
+        <MultiConditionLab conditions={job.results[0].multi_condition_lab} title="Best Match — Multi-Condition LAB" />
       )}
 
       {/* Spectral Comparison Chart */}

@@ -13,13 +13,27 @@ const ILLUMINANT_NAMES = {
   A: 'A (Tungsten)',
 };
 
+const OBSERVER_LABELS = {
+  '2': '2\u00b0',
+  '10': '10\u00b0',
+};
+
 function MetamerismPanel({ metamerism }) {
   if (!metamerism || !metamerism.illuminants) return null;
+
+  const observer = metamerism.observer || '2';
+  const filter = metamerism.measurement_filter;
 
   return (
     <Card className="mt-3">
       <Card.Header className="d-flex justify-content-between align-items-center">
-        <span>Multi-Illuminant Analysis</span>
+        <span>
+          Multi-Illuminant Analysis
+          <span className="text-muted ms-2 small">
+            Observer: {OBSERVER_LABELS[observer] || observer}
+            {filter && <> | Filter: {filter}</>}
+          </span>
+        </span>
         <Badge bg={RISK_COLORS[metamerism.metamerism_risk] || 'secondary'}>
           Metamerism Risk: {metamerism.metamerism_risk}
         </Badge>

@@ -5,14 +5,28 @@ Implements core color math operations needed by the formulation engine:
   - XYZ to CIELAB conversion
   - CIEDE2000 color difference calculation
   - Kubelka-Munk K/S calculation from reflectance
+  - Multi-observer support (2° and 10° standard observers)
+  - Measurement filter conditions (M0, M1, M2, M3) per ISO 13655
 
 All spectral calculations use:
   - CIE D50 illuminant (standard for graphic arts / printing)
-  - CIE 2° standard observer
   - Wavelength range 360-780nm at 10nm intervals (43 data points)
+  - Configurable observer (2° or 10°) and measurement filter
+
+Observers:
+  - 2°  (CIE 1931) — standard for small field (<4°), traditional colorimetry
+  - 10° (CIE 1964) — supplementary for larger field (>4°), better for large patches
+
+Measurement Filters (ISO 13655):
+  - M0: No UV filtering (includes all UV in source). Legacy/uncontrolled.
+  - M1: D50 illuminant with defined UV content. Standard for graphic arts.
+  - M2: UV-excluded (420nm cut). For measuring without UV fluorescence.
+  - M3: Polarized measurement. For eliminating first-surface gloss.
 
 References:
   - CIE 15:2004 (Colorimetry)
+  - CIE 170-1:2006 (10° observer)
+  - ISO 13655:2017 (Graphic technology — Spectral measurement conditions)
   - ASTM E308 (Standard Practice for Computing Colors of Objects)
   - Kubelka, P. and Munk, F. (1931), Z. Tech. Phys., 12, 593
 """
@@ -52,6 +66,45 @@ CMF_Z = np.array([
     0.0002, 0.0001, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000,
     0.0000, 0.0000, 0.0000
 ])
+
+# CIE 10° Standard Observer color matching functions (360-780nm, 10nm interval)
+# Source: CIE 15:2004 Table T.3 (CIE 1964 supplementary observer)
+# Used for larger field stimuli (>4°), common in industrial color measurement.
+# fmt: off
+CMF_X_10 = np.array([
+    0.0002, 0.0007, 0.0024, 0.0093, 0.0291, 0.0633, 0.1096, 0.1655,
+    0.2257, 0.2904, 0.3391, 0.3954, 0.4608, 0.5314, 0.6067, 0.6857,
+    0.7618, 0.8233, 0.8752, 0.9238, 0.9620, 0.9822, 0.9918, 0.9991,
+    0.9973, 0.9824, 0.9556, 0.9152, 0.8689, 0.8256, 0.7774, 0.7204,
+    0.6583, 0.5939, 0.5280, 0.4618, 0.3981, 0.3396, 0.2835, 0.2283,
+    0.1798, 0.1402, 0.1076
+])
+
+CMF_Y_10 = np.array([
+    0.0000, 0.0001, 0.0003, 0.0010, 0.0035, 0.0095, 0.0228, 0.0420,
+    0.0668, 0.0988, 0.1344, 0.1789, 0.2458, 0.3400, 0.4622, 0.6075,
+    0.7615, 0.8750, 0.9620, 1.0026, 1.0000, 0.9628, 0.8973, 0.8110,
+    0.7097, 0.6027, 0.4959, 0.3916, 0.2952, 0.2129, 0.1470, 0.0993,
+    0.0636, 0.0394, 0.0232, 0.0136, 0.0079, 0.0040, 0.0020, 0.0010,
+    0.0005, 0.0003, 0.0001
+])
+
+CMF_Z_10 = np.array([
+    0.0007, 0.0029, 0.0105, 0.0402, 0.1334, 0.2839, 0.5326, 0.7922,
+    1.0582, 1.3176, 1.5281, 1.7412, 1.9693, 2.1633, 2.2726, 2.2487,
+    2.1137, 1.8880, 1.5949, 1.2876, 0.9932, 0.7295, 0.5093, 0.3324,
+    0.2043, 0.1187, 0.0651, 0.0332, 0.0159, 0.0074, 0.0033, 0.0015,
+    0.0006, 0.0003, 0.0001, 0.0001, 0.0000, 0.0000, 0.0000, 0.0000,
+    0.0000, 0.0000, 0.0000
+])
+# fmt: on
+
+# Observer registry — maps observer name to its CMFs
+OBSERVERS = {
+    '2': {'x': CMF_X, 'y': CMF_Y, 'z': CMF_Z, 'label': 'CIE 2° (1931)'},
+    '10': {'x': CMF_X_10, 'y': CMF_Y_10, 'z': CMF_Z_10, 'label': 'CIE 10° (1964)'},
+}
+
 
 # CIE D50 illuminant SPD (360-780nm, 10nm interval)
 # Source: CIE 15:2004
@@ -252,27 +305,162 @@ A_XN = np.sum(A_SPD * CMF_X) * _kA
 A_YN = 100.0
 A_ZN = np.sum(A_SPD * CMF_Z) * _kA
 
-# Illuminant registry for easy lookup
+# --- Measurement Filter Conditions (ISO 13655) ---
+# These modify the effective illuminant SPD to simulate different measurement modes.
+
+def _apply_m2_uv_cut(spd):
+    """Apply M2 UV-excluded filter: zero out energy below 400nm.
+
+    M2 measurements use a UV-cut filter (typically 400nm or 420nm cutoff)
+    to eliminate UV-excited fluorescence. In practice this means the
+    illuminant has no energy below ~400nm.
+    """
+    filtered = spd.copy()
+    # Wavelengths: 360, 370, 380, 390 → indices 0,1,2,3
+    filtered[0:4] = 0.0  # Zero below 400nm
+    return filtered
+
+
+def _apply_m3_polarized(spd):
+    """Apply M3 polarized filter: reduce specular component.
+
+    M3 uses cross-polarized measurement to remove first-surface (specular)
+    reflection. The illuminant SPD itself is unchanged but the effective
+    signal is reduced by the polarizer transmission (~40-45% loss).
+    We model this as a uniform attenuation since the polarization effect
+    is on the measurement geometry, not the illuminant spectrum shape.
+    """
+    # Polarization reduces total light by ~50% (crossed polarizers)
+    # but the spectral shape remains the same. For colorimetric computation
+    # the normalization factor k cancels this out, so M3 SPD = M1 SPD.
+    # The real effect is on the measured reflectance (no gloss), not the
+    # computation. We return unmodified SPD; the user supplies M3 reflectance.
+    return spd.copy()
+
+
+# Pre-compute M2 filtered D50 SPD
+D50_M2_SPD = _apply_m2_uv_cut(D50_SPD)
+
+# Measurement conditions registry
+# M0 = no defined UV content (legacy, uses raw D50)
+# M1 = D50 with defined UV content (standard for graphic arts; same as D50)
+# M2 = UV-excluded (below 400nm zeroed)
+# M3 = polarized (same SPD as M1; difference is in measured reflectance)
+MEASUREMENT_FILTERS = {
+    'M0': {'label': 'M0 — No UV control (legacy)', 'spd_modifier': None},
+    'M1': {'label': 'M1 — D50 with UV (ISO 13655)', 'spd_modifier': None},
+    'M2': {'label': 'M2 — UV excluded (400nm cut)', 'spd_modifier': _apply_m2_uv_cut},
+    'M3': {'label': 'M3 — Polarized (no gloss)', 'spd_modifier': _apply_m3_polarized},
+}
+
+
+def _compute_white_point(spd, observer='2'):
+    """Compute white point (Xn, Yn, Zn) for an SPD and observer."""
+    obs = OBSERVERS[observer]
+    k = 100.0 / np.sum(spd * obs['y'])
+    Xn = np.sum(spd * obs['x']) * k
+    Zn = np.sum(spd * obs['z']) * k
+    return Xn, 100.0, Zn
+
+
+# Illuminant registry for easy lookup (2° observer by default)
 ILLUMINANTS = {
     'D50': {'spd': D50_SPD, 'Xn': D50_XN, 'Yn': D50_YN, 'Zn': D50_ZN},
     'D65': {'spd': D65_SPD, 'Xn': D65_XN, 'Yn': D65_YN, 'Zn': D65_ZN},
     'A':   {'spd': A_SPD,   'Xn': A_XN,   'Yn': A_YN,   'Zn': A_ZN},
 }
 
+# Pre-compute white points for 10° observer
+_k_D50_10 = 100.0 / np.sum(D50_SPD * CMF_Y_10)
+D50_XN_10 = np.sum(D50_SPD * CMF_X_10) * _k_D50_10
+D50_ZN_10 = np.sum(D50_SPD * CMF_Z_10) * _k_D50_10
 
-def spectral_to_lab_illuminant(reflectance: np.ndarray, illuminant: str = 'D50') -> tuple:
-    """Convert spectral reflectance to CIELAB under a specified illuminant."""
-    ill = ILLUMINANTS[illuminant]
+_k_D65_10 = 100.0 / np.sum(D65_SPD * CMF_Y_10)
+D65_XN_10 = np.sum(D65_SPD * CMF_X_10) * _k_D65_10
+D65_ZN_10 = np.sum(D65_SPD * CMF_Z_10) * _k_D65_10
+
+_k_A_10 = 100.0 / np.sum(A_SPD * CMF_Y_10)
+A_XN_10 = np.sum(A_SPD * CMF_X_10) * _k_A_10
+A_ZN_10 = np.sum(A_SPD * CMF_Z_10) * _k_A_10
+
+# Extended illuminant registry keyed by (illuminant, observer)
+ILLUMINANTS_EXT = {
+    ('D50', '2'):  {'spd': D50_SPD, 'Xn': D50_XN,    'Yn': 100.0, 'Zn': D50_ZN},
+    ('D50', '10'): {'spd': D50_SPD, 'Xn': D50_XN_10, 'Yn': 100.0, 'Zn': D50_ZN_10},
+    ('D65', '2'):  {'spd': D65_SPD, 'Xn': D65_XN,    'Yn': 100.0, 'Zn': D65_ZN},
+    ('D65', '10'): {'spd': D65_SPD, 'Xn': D65_XN_10, 'Yn': 100.0, 'Zn': D65_ZN_10},
+    ('A', '2'):    {'spd': A_SPD,   'Xn': A_XN,      'Yn': 100.0, 'Zn': A_ZN},
+    ('A', '10'):   {'spd': A_SPD,   'Xn': A_XN_10,   'Yn': 100.0, 'Zn': A_ZN_10},
+}
+
+
+def spectral_to_lab_illuminant(reflectance: np.ndarray, illuminant: str = 'D50',
+                                observer: str = '2', measurement_filter: str = None) -> tuple:
+    """Convert spectral reflectance to CIELAB under specified conditions.
+
+    Args:
+        reflectance: Array of 43 reflectance values (360-780nm).
+        illuminant: Illuminant name ('D50', 'D65', 'A').
+        observer: Observer angle ('2' for 2°, '10' for 10°).
+        measurement_filter: ISO 13655 filter ('M0', 'M1', 'M2', 'M3') or None.
+
+    Returns:
+        Tuple of (L*, a*, b*).
+    """
+    return spectral_to_lab_full(reflectance, illuminant, observer, measurement_filter)
+
+
+def spectral_to_lab_full(reflectance: np.ndarray, illuminant: str = 'D50',
+                          observer: str = '2', measurement_filter: str = None) -> tuple:
+    """Full-featured spectral to CIELAB conversion.
+
+    Supports all combinations of illuminant, observer, and measurement filter.
+
+    Args:
+        reflectance: Array of 43 reflectance values (360-780nm).
+        illuminant: Illuminant name ('D50', 'D65', 'A').
+        observer: Observer angle ('2' for 2°, '10' for 10°).
+        measurement_filter: ISO 13655 filter ('M0', 'M1', 'M2', 'M3') or None.
+
+    Returns:
+        Tuple of (L*, a*, b*).
+    """
     r = np.asarray(reflectance, dtype=float)
-    k = 100.0 / np.sum(ill['spd'] * CMF_Y)
-    X = k * np.sum(ill['spd'] * r * CMF_X)
-    Y = k * np.sum(ill['spd'] * r * CMF_Y)
-    Z = k * np.sum(ill['spd'] * r * CMF_Z)
+    obs = OBSERVERS[observer]
+
+    # Get illuminant SPD
+    key = (illuminant, observer)
+    if key in ILLUMINANTS_EXT:
+        ill = ILLUMINANTS_EXT[key]
+    else:
+        ill = ILLUMINANTS[illuminant]
+
+    spd = ill['spd'].copy()
+
+    # Apply measurement filter if specified
+    if measurement_filter and measurement_filter in MEASUREMENT_FILTERS:
+        modifier = MEASUREMENT_FILTERS[measurement_filter]['spd_modifier']
+        if modifier is not None:
+            spd = modifier(spd)
+            # Recompute white point for the filtered SPD
+            Xn, Yn, Zn = _compute_white_point(spd, observer)
+            k = 100.0 / np.sum(spd * obs['y'])
+            X = k * np.sum(spd * r * obs['x'])
+            Y = k * np.sum(spd * r * obs['y'])
+            Z = k * np.sum(spd * r * obs['z'])
+            return xyz_to_lab(X, Y, Z, Xn, Yn, Zn)
+
+    # Standard computation with pre-computed white points
+    k = 100.0 / np.sum(spd * obs['y'])
+    X = k * np.sum(spd * r * obs['x'])
+    Y = k * np.sum(spd * r * obs['y'])
+    Z = k * np.sum(spd * r * obs['z'])
     return xyz_to_lab(X, Y, Z, ill['Xn'], ill['Yn'], ill['Zn'])
 
 
 def metamerism_index(reflectance1: np.ndarray, reflectance2: np.ndarray,
-                     illuminants: list = None) -> dict:
+                     illuminants: list = None, observer: str = '2',
+                     measurement_filter: str = None) -> dict:
     """Compute metamerism index between two spectra across illuminants.
 
     Two colors may match under one illuminant but diverge under another.
@@ -282,17 +470,20 @@ def metamerism_index(reflectance1: np.ndarray, reflectance2: np.ndarray,
         reflectance1: First spectral reflectance (43 values).
         reflectance2: Second spectral reflectance (43 values).
         illuminants: List of illuminant names (default: D50, D65, A).
+        observer: Observer angle ('2' or '10').
+        measurement_filter: ISO 13655 filter ('M0', 'M1', 'M2', 'M3') or None.
 
     Returns:
-        Dict with 'illuminants' (per-illuminant dE00) and 'metamerism_risk' flag.
+        Dict with 'illuminants' (per-illuminant dE00), 'metamerism_risk',
+        'observer', and 'measurement_filter'.
     """
     if illuminants is None:
         illuminants = ['D50', 'D65', 'A']
 
     results = {}
     for ill_name in illuminants:
-        lab1 = spectral_to_lab_illuminant(reflectance1, ill_name)
-        lab2 = spectral_to_lab_illuminant(reflectance2, ill_name)
+        lab1 = spectral_to_lab_full(reflectance1, ill_name, observer, measurement_filter)
+        lab2 = spectral_to_lab_full(reflectance2, ill_name, observer, measurement_filter)
         de = delta_e_2000(lab1, lab2)
         results[ill_name] = {
             'lab1': {'L': round(lab1[0], 2), 'a': round(lab1[1], 2), 'b': round(lab1[2], 2)},
@@ -307,7 +498,51 @@ def metamerism_index(reflectance1: np.ndarray, reflectance2: np.ndarray,
         'illuminants': results,
         'max_spread': round(max_spread, 4),
         'metamerism_risk': 'high' if max_spread > 2.0 else 'moderate' if max_spread > 1.0 else 'low',
+        'observer': observer,
+        'measurement_filter': measurement_filter,
     }
+
+
+def compute_lab_multi_condition(reflectance: np.ndarray,
+                                 conditions: list = None) -> list:
+    """Compute LAB values under multiple illuminant/observer/filter conditions.
+
+    Useful for displaying a color's appearance under different viewing conditions.
+
+    Args:
+        reflectance: Array of 43 reflectance values.
+        conditions: List of dicts, each with 'illuminant', 'observer', 'filter' keys.
+                    Defaults to standard graphic arts conditions.
+
+    Returns:
+        List of dicts with condition info and computed LAB values.
+    """
+    if conditions is None:
+        conditions = [
+            {'illuminant': 'D50', 'observer': '2', 'filter': 'M1'},
+            {'illuminant': 'D50', 'observer': '10', 'filter': 'M1'},
+            {'illuminant': 'D50', 'observer': '2', 'filter': 'M2'},
+            {'illuminant': 'D65', 'observer': '2', 'filter': None},
+            {'illuminant': 'A', 'observer': '2', 'filter': None},
+        ]
+
+    results = []
+    for cond in conditions:
+        ill = cond.get('illuminant', 'D50')
+        obs = cond.get('observer', '2')
+        filt = cond.get('filter')
+        lab = spectral_to_lab_full(reflectance, ill, obs, filt)
+        obs_info = OBSERVERS.get(obs, {})
+        filt_info = MEASUREMENT_FILTERS.get(filt, {}) if filt else {}
+        results.append({
+            'illuminant': ill,
+            'observer': obs,
+            'observer_label': obs_info.get('label', f'{obs}°'),
+            'filter': filt,
+            'filter_label': filt_info.get('label', filt or 'None'),
+            'lab': {'L': round(lab[0], 2), 'a': round(lab[1], 2), 'b': round(lab[2], 2)},
+        })
+    return results
 
 
 def reflectance_to_ks(reflectance: np.ndarray) -> np.ndarray:

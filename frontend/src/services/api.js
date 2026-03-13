@@ -85,7 +85,7 @@ export const pantoneAPI = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
   listFormulas: (params = {}) => api.get('/pantone/formulas', { params }),
-  getFormula: (id) => api.get(`/pantone/formulas/${id}`),
+  getFormula: (id, config = {}) => api.get(`/pantone/formulas/${id}`, config),
   formulate: (targetId, seriesId, substrateId = null) =>
     api.post('/pantone/formulate', { target_id: targetId, series_id: seriesId, substrate_id: substrateId }),
   formulateAll: (seriesId, library = null, substrateId = null) =>
@@ -97,7 +97,7 @@ export const pantoneAPI = {
 // Substrates
 export const substratesAPI = {
   list: (params = {}) => api.get('/substrates', { params }),
-  get: (id) => api.get(`/substrates/${id}`),
+  get: (id, config = {}) => api.get(`/substrates/${id}`, config),
   create: (data) => api.post('/substrates', data),
   createFromCxf: (formData) =>
     api.post('/substrates', formData, {
@@ -110,7 +110,7 @@ export const substratesAPI = {
 // Custom Match
 export const customMatchAPI = {
   listJobs: (params = {}) => api.get('/custom-match/jobs', { params }),
-  getJob: (id) => api.get(`/custom-match/jobs/${id}`),
+  getJob: (id, config = {}) => api.get(`/custom-match/jobs/${id}`, config),
   matchFromLab: (data) => api.post('/custom-match/match-lab', data),
   matchFromCxf: (formData) =>
     api.post('/custom-match/match-cxf', formData, {

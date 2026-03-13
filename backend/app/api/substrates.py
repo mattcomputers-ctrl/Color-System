@@ -10,7 +10,10 @@ from app.models.substrate import Substrate
 from app.models.upload import UploadedFile
 from app.models.audit import AuditLog
 from app.services.cxf_parser import CxfParser
-from app.services.color_science import spectral_to_lab, reflectance_to_ks
+from app.services.color_science import (
+    spectral_to_lab, reflectance_to_ks, compute_lab_multi_condition,
+    OBSERVERS, MEASUREMENT_FILTERS,
+)
 from app.utils.auth import login_required, role_required, get_current_user
 from app.utils.file_handler import allowed_file, save_upload
 
@@ -47,11 +50,19 @@ def list_substrates():
 @substrates_bp.route('/<int:substrate_id>', methods=['GET'])
 @login_required
 def get_substrate(substrate_id):
-    """Get a single substrate."""
+    """Get a single substrate with optional multi-condition LAB."""
     substrate = db.session.get(Substrate, substrate_id)
     if not substrate:
         return jsonify({'error': 'Substrate not found'}), 404
-    return jsonify({'substrate': substrate.to_dict(include_spectral=True)})
+    d = substrate.to_dict(include_spectral=True)
+    # Add multi-condition LAB if spectral data exists
+    if substrate.spectral_reflectance:
+        try:
+            refl = np.array(substrate.spectral_reflectance)
+            d['multi_condition_lab'] = compute_lab_multi_condition(refl)
+        except Exception:
+            pass
+    return jsonify({'substrate': d})
 
 
 @substrates_bp.route('', methods=['POST'])
