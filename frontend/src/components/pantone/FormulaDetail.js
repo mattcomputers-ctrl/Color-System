@@ -28,7 +28,7 @@ function FormulaDetail() {
   useEffect(() => {
     fetchFormula(observer, filter)
       .finally(() => setLoading(false));
-  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [id, fetchFormula, observer, filter]);
 
   const handleObserverChange = (value) => {
     setObserver(value);

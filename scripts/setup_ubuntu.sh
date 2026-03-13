@@ -295,7 +295,7 @@ echo "[9/12] Building frontend (this takes 1-3 minutes)..."
 cd "${APP_DIR}/frontend"
 echo "REACT_APP_API_URL=/api/v1" > .env
 
-npm install --silent 2>&1 | tail -3
+npm install 2>&1 | tail -3
 echo "  Node modules installed."
 
 npm run build 2>&1 | tail -3

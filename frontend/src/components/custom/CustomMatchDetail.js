@@ -28,7 +28,7 @@ function CustomMatchDetail() {
   useEffect(() => {
     fetchJob(observer, filter)
       .finally(() => setLoading(false));
-  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [id, fetchJob, observer, filter]);
 
   const handleObserverChange = (value) => {
     setObserver(value);
