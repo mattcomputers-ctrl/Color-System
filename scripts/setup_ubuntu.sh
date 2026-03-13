@@ -279,11 +279,8 @@ sudo -u postgres psql -d "${DB_NAME}" -c "
     ALTER SCHEMA public OWNER TO ${DB_USER};
 " > /dev/null 2>&1
 
-# The repo ships with migrations/ (alembic.ini, env.py, script.py.mako)
-# but no version files. Ensure the versions directory exists and is clean
-# so flask db migrate generates a fresh initial migration.
+# Ensure the versions directory exists
 mkdir -p "${APP_DIR}/backend/migrations/versions"
-rm -f "${APP_DIR}/backend/migrations/versions/"*.py 2>/dev/null || true
 
 # Verify the Flask app can start (catches missing packages early)
 echo "  Verifying app imports..."
@@ -294,23 +291,26 @@ if ! python -c "from app import create_app; create_app()" 2>&1; then
     exit 1
 fi
 
-# Generate and apply migrations
-echo "  Generating migration..."
-if ! flask db migrate -m "Initial schema" 2>&1; then
+# Create all tables directly from SQLAlchemy models.
+# This is more reliable than flask db migrate (auto-generation) because it
+# guarantees every model's table is created, regardless of migration history.
+echo "  Creating database tables..."
+if ! python -c "
+from app import create_app, db
+app = create_app()
+with app.app_context():
+    db.create_all()
+    print('  All tables created successfully.')
+" 2>&1; then
     echo ""
-    echo "  ERROR: flask db migrate failed."
-    echo "  Common causes:"
-    echo "    - Database connection issue (check DATABASE_URL)"
-    echo "    - Model import error"
+    echo "  ERROR: Failed to create database tables."
+    echo "  Check DATABASE_URL and PostgreSQL status."
     exit 1
 fi
 
-echo "  Applying migration..."
-if ! flask db upgrade 2>&1; then
-    echo ""
-    echo "  ERROR: flask db upgrade failed."
-    exit 1
-fi
+# Stamp alembic to mark all migrations as applied, so future
+# flask db upgrade calls won't try to re-create existing tables.
+flask db stamp head > /dev/null 2>&1 || true
 echo "  Database tables created."
 
 echo "  Loading seed data..."

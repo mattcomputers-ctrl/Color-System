@@ -76,7 +76,7 @@ def role_required(*roles):
             user = get_current_user()
             if user is None:
                 return jsonify({'error': 'Authentication required'}), 401
-            if user.role.name not in roles:
+            if not user.role or user.role.name not in roles:
                 return jsonify({'error': 'Insufficient permissions'}), 403
             return f(*args, **kwargs)
         return decorated
