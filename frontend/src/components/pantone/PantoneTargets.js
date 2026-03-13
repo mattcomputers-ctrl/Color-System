@@ -55,12 +55,15 @@ function PantoneTargets() {
     }
   };
 
-  if (loading) return <div className="text-center mt-5"><Spinner animation="border" /></div>;
+  if (loading) return <div className="page-spinner"><Spinner animation="border" variant="primary" /></div>;
 
   return (
     <div>
       <div className="page-header d-flex justify-content-between align-items-center">
-        <h2>Pantone Targets</h2>
+        <div>
+          <h2>Pantone Targets</h2>
+          <p className="text-muted mb-0" style={{ fontSize: '0.875rem' }}>Reference color library with LAB values for formulation</p>
+        </div>
         <Button variant="primary" onClick={() => setShowModal(true)}>+ Add Target</Button>
       </div>
 
@@ -116,7 +119,7 @@ function PantoneTargets() {
         )}
       </Card>
 
-      <Modal show={showModal} onHide={() => setShowModal(false)}>
+      <Modal show={showModal} onHide={() => setShowModal(false)} centered>
         <Modal.Header closeButton><Modal.Title>Add Pantone Target</Modal.Title></Modal.Header>
         <Form onSubmit={handleCreate}>
           <Modal.Body>

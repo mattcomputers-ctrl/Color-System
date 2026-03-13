@@ -74,7 +74,10 @@ function PantoneFormulas() {
   return (
     <div>
       <div className="page-header d-flex justify-content-between align-items-center">
-        <h2>Pantone Formulas</h2>
+        <div>
+          <h2>Pantone Formulas</h2>
+          <p className="text-muted mb-0" style={{ fontSize: '0.875rem' }}>Generated ink formulas with dE2000 quality metrics</p>
+        </div>
         <div>
           <Button variant="outline-success" className="me-2" onClick={() => setShowBulkModal(true)}>
             Generate All
@@ -178,7 +181,7 @@ function PantoneFormulas() {
       </Card>
 
       {/* Bulk Generate Modal */}
-      <Modal show={showBulkModal} onHide={() => { if (!bulkRunning) setShowBulkModal(false); }} size="lg">
+      <Modal show={showBulkModal} onHide={() => { if (!bulkRunning) setShowBulkModal(false); }} size="lg" centered>
         <Modal.Header closeButton>
           <Modal.Title>Generate Formulas for All Pantone Colors</Modal.Title>
         </Modal.Header>

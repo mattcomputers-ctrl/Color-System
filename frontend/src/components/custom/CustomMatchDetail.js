@@ -49,7 +49,7 @@ function CustomMatchDetail() {
     }
   };
 
-  if (loading) return <div className="text-center mt-5"><Spinner animation="border" /></div>;
+  if (loading) return <div className="page-spinner"><Spinner animation="border" variant="primary" /></div>;
   if (!job) return <p>Match job not found.</p>;
 
   return (

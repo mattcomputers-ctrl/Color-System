@@ -60,7 +60,7 @@ function FormulaDetail() {
     }
   };
 
-  if (loading) return <div className="text-center mt-5"><Spinner animation="border" /></div>;
+  if (loading) return <div className="page-spinner"><Spinner animation="border" variant="primary" /></div>;
   if (!formula) return <p>Formula not found.</p>;
 
   const target = formula.target || {};

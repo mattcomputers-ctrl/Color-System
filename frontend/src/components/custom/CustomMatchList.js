@@ -38,7 +38,10 @@ function CustomMatchList() {
   return (
     <div>
       <div className="page-header d-flex justify-content-between align-items-center">
-        <h2>Custom Match History</h2>
+        <div>
+          <h2>Custom Match History</h2>
+          <p className="text-muted mb-0" style={{ fontSize: '0.875rem' }}>Previous color matching jobs and results</p>
+        </div>
         <Link to="/custom-match/new" className="btn btn-primary">+ New Match</Link>
       </div>
 

@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Form, Button, Spinner, Row, Col, Alert, Table } from 'react-bootstrap';
-import { Link, useNavigate } from 'react-router-dom';
+import { Card, Form, Button, Spinner, Row, Col, Table } from 'react-bootstrap';
+import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { pantoneAPI, seriesAPI, substratesAPI } from '../../services/api';
 import { labToApproxHex, getDeltaEClass, getDeltaELabel } from '../../utils/helpers';
 
 function PantoneFormulate() {
-  const navigate = useNavigate();
   const [series, setSeries] = useState([]);
   const [substrates, setSubstrates] = useState([]);
   const [targets, setTargets] = useState([]);
@@ -57,28 +56,32 @@ function PantoneFormulate() {
     <div>
       <div className="page-header">
         <h2>Generate Pantone Formula</h2>
+        <p className="text-muted mb-0" style={{ fontSize: '0.875rem' }}>
+          Select a Pantone target color and ink series to compute an optimal formula
+        </p>
       </div>
 
-      <Row>
-        <Col md={6}>
+      <Row className="g-4">
+        {/* Left Column - Input */}
+        <Col lg={5}>
           <Card className="mb-4">
-            <Card.Header><strong>Select Target & Series</strong></Card.Header>
+            <Card.Header><strong>Configuration</strong></Card.Header>
             <Card.Body>
-              <Form.Group className="mb-3">
-                <Form.Label>Search Pantone Target</Form.Label>
+              {/* Target Search */}
+              <Form.Group className="mb-4">
+                <Form.Label>Pantone Target</Form.Label>
                 <Form.Control
                   value={targetSearch}
                   onChange={e => setTargetSearch(e.target.value)}
-                  placeholder="Type a Pantone code (e.g., 185 C)..."
+                  placeholder="Search by Pantone code (e.g., 185 C)..."
+                  className="mb-2"
                 />
                 {targets.length > 0 && (
                   <Form.Select
-                    className="mt-2"
                     value={selectedTarget}
                     onChange={e => setSelectedTarget(e.target.value)}
-                    size="sm"
                   >
-                    <option value="">Select a target...</option>
+                    <option value="">Select from results...</option>
                     {targets.map(t => (
                       <option key={t.id} value={t.id}>
                         {t.pantone_code} — L*{t.lab_values?.L?.toFixed(1)} a*{t.lab_values?.a?.toFixed(1)} b*{t.lab_values?.b?.toFixed(1)}
@@ -88,7 +91,29 @@ function PantoneFormulate() {
                 )}
               </Form.Group>
 
-              <Form.Group className="mb-3">
+              {/* Target Preview */}
+              {target && (
+                <div className="d-flex align-items-center gap-3 mb-4 p-3 rounded" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                  <div
+                    className="color-swatch-lg"
+                    style={{
+                      backgroundColor: target.lab_values
+                        ? labToApproxHex(target.lab_values.L, target.lab_values.a, target.lab_values.b)
+                        : '#e2e8f0',
+                      border: '2px solid #e2e8f0',
+                    }}
+                  />
+                  <div>
+                    <div className="fw-semibold" style={{ fontSize: '1.0625rem' }}>{target.pantone_code}</div>
+                    <div className="text-mono text-muted" style={{ fontSize: '0.8125rem' }}>
+                      L* {target.lab_values?.L?.toFixed(2)} &nbsp; a* {target.lab_values?.a?.toFixed(2)} &nbsp; b* {target.lab_values?.b?.toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Ink Series */}
+              <Form.Group className="mb-4">
                 <Form.Label>Ink Series</Form.Label>
                 <Form.Select
                   value={selectedSeries}
@@ -101,49 +126,33 @@ function PantoneFormulate() {
                 </Form.Select>
               </Form.Group>
 
-              <Form.Group className="mb-3">
-                <Form.Label>Substrate</Form.Label>
+              {/* Substrate */}
+              <Form.Group className="mb-4">
+                <Form.Label>Substrate Override</Form.Label>
                 <Form.Select
                   value={selectedSubstrate}
                   onChange={e => setSelectedSubstrate(e.target.value)}
                 >
-                  <option value="">Auto-detect from series (default)</option>
+                  <option value="">Use series default</option>
                   {substrates.map(s => (
                     <option key={s.id} value={s.id}>
                       {s.name}{s.substrate_type ? ` (${s.substrate_type})` : ''}
                     </option>
                   ))}
                 </Form.Select>
-                <Form.Text className="text-muted">
-                  Override the substrate used for formulation calculations
-                </Form.Text>
+                <Form.Text>Leave as default unless you need a specific substrate</Form.Text>
               </Form.Group>
 
-              {target && (
-                <div className="d-flex align-items-center gap-3 mb-3 p-3 bg-light rounded">
-                  <div className="color-swatch" style={{
-                    backgroundColor: target.lab_values
-                      ? labToApproxHex(target.lab_values.L, target.lab_values.a, target.lab_values.b)
-                      : '#ccc',
-                    width: 48, height: 48,
-                  }} />
-                  <div>
-                    <strong>{target.pantone_code}</strong>
-                    <br />
-                    <small className="text-muted">
-                      L*{target.lab_values?.L?.toFixed(2)} a*{target.lab_values?.a?.toFixed(2)} b*{target.lab_values?.b?.toFixed(2)}
-                    </small>
-                  </div>
-                </div>
-              )}
-
+              {/* Generate Button */}
               <Button
-                variant="primary" className="w-100"
+                variant="primary"
+                size="lg"
+                className="w-100"
                 onClick={handleFormulate}
                 disabled={!selectedSeries || !selectedTarget || formulating}
               >
                 {formulating ? (
-                  <><Spinner animation="border" size="sm" className="me-2" /> Formulating...</>
+                  <><Spinner animation="border" size="sm" className="me-2" /> Computing Formula...</>
                 ) : (
                   'Generate Formula'
                 )}
@@ -152,8 +161,9 @@ function PantoneFormulate() {
           </Card>
         </Col>
 
-        <Col md={6}>
-          {result && (
+        {/* Right Column - Result */}
+        <Col lg={7}>
+          {result ? (
             <Card>
               <Card.Header className="d-flex justify-content-between align-items-center">
                 <strong>Formula Result</strong>
@@ -162,41 +172,80 @@ function PantoneFormulate() {
                 </Link>
               </Card.Header>
               <Card.Body>
-                <div className="d-flex align-items-center gap-3 mb-3">
-                  <div className="color-swatch" style={{
-                    backgroundColor: result.predicted_lab
-                      ? labToApproxHex(result.predicted_lab.L, result.predicted_lab.a, result.predicted_lab.b)
-                      : '#ccc',
-                    width: 48, height: 48,
-                  }} />
-                  <div>
-                    <span className={`delta-e-badge ${getDeltaEClass(result.delta_e_2000)}`}>
-                      DE*00: {result.delta_e_2000?.toFixed(4)} — {getDeltaELabel(result.delta_e_2000)}
-                    </span>
-                    <br />
-                    <small className="text-muted">
-                      Predicted: L*{result.predicted_lab?.L?.toFixed(2)} a*{result.predicted_lab?.a?.toFixed(2)} b*{result.predicted_lab?.b?.toFixed(2)}
-                    </small>
-                  </div>
+                {/* Color comparison */}
+                <Row className="g-3 mb-4">
+                  <Col xs={6}>
+                    <div className="text-center p-3 rounded" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                      <div
+                        className="color-swatch-lg mx-auto mb-2"
+                        style={{
+                          backgroundColor: target
+                            ? labToApproxHex(target.lab_values?.L, target.lab_values?.a, target.lab_values?.b)
+                            : '#e2e8f0',
+                          width: 64, height: 64, border: '2px solid #e2e8f0',
+                        }}
+                      />
+                      <div className="fw-medium" style={{ fontSize: '0.8125rem' }}>Target</div>
+                      <div className="text-mono text-muted" style={{ fontSize: '0.75rem' }}>
+                        {target?.lab_values?.L?.toFixed(2)} / {target?.lab_values?.a?.toFixed(2)} / {target?.lab_values?.b?.toFixed(2)}
+                      </div>
+                    </div>
+                  </Col>
+                  <Col xs={6}>
+                    <div className="text-center p-3 rounded" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                      <div
+                        className="color-swatch-lg mx-auto mb-2"
+                        style={{
+                          backgroundColor: result.predicted_lab
+                            ? labToApproxHex(result.predicted_lab.L, result.predicted_lab.a, result.predicted_lab.b)
+                            : '#e2e8f0',
+                          width: 64, height: 64, border: '2px solid #e2e8f0',
+                        }}
+                      />
+                      <div className="fw-medium" style={{ fontSize: '0.8125rem' }}>Predicted</div>
+                      <div className="text-mono text-muted" style={{ fontSize: '0.75rem' }}>
+                        {result.predicted_lab?.L?.toFixed(2)} / {result.predicted_lab?.a?.toFixed(2)} / {result.predicted_lab?.b?.toFixed(2)}
+                      </div>
+                    </div>
+                  </Col>
+                </Row>
+
+                {/* Delta E */}
+                <div className="text-center mb-4">
+                  <span className={`delta-e-badge ${getDeltaEClass(result.delta_e_2000)}`} style={{ fontSize: '1rem', padding: '0.4rem 1rem' }}>
+                    dE*00: {result.delta_e_2000?.toFixed(4)} — {getDeltaELabel(result.delta_e_2000)}
+                  </span>
                 </div>
 
-                <Table size="sm" className="formula-table">
+                {/* Components table */}
+                <Table className="formula-table">
                   <thead>
-                    <tr><th>Base</th><th>Name</th><th className="text-end">%</th><th className="text-end">g/kg</th></tr>
+                    <tr>
+                      <th>Base</th>
+                      <th>Name</th>
+                      <th className="text-end">Percentage</th>
+                      <th className="text-end">g/kg</th>
+                    </tr>
                   </thead>
                   <tbody>
                     {result.components?.map((c, i) => (
                       <tr key={i}>
-                        <td><strong>{c.base_code}</strong></td>
+                        <td className="fw-semibold">{c.base_code}</td>
                         <td>{c.base_name}</td>
-                        <td className="text-end">{c.percentage?.toFixed(2)}</td>
-                        <td className="text-end">{c.weight_grams?.toFixed(1)}</td>
+                        <td className="text-end text-mono">{c.percentage?.toFixed(2)}%</td>
+                        <td className="text-end text-mono">{c.weight_grams?.toFixed(1)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </Table>
               </Card.Body>
             </Card>
+          ) : (
+            <div className="empty-state" style={{ minHeight: 400, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div className="empty-icon" style={{ fontSize: '3rem' }}>&#127912;</div>
+              <h6>Ready to Formulate</h6>
+              <p>Select a Pantone target and ink series, then click Generate to compute an optimal ink formula.</p>
+            </div>
           )}
         </Col>
       </Row>

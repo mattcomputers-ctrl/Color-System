@@ -30,7 +30,10 @@ function AuditLog() {
 
   return (
     <div>
-      <div className="page-header"><h2>Audit Log</h2></div>
+      <div className="page-header">
+        <h2>Audit Log</h2>
+        <p className="text-muted mb-0" style={{ fontSize: '0.875rem' }}>Track all system actions and changes</p>
+      </div>
 
       <Card className="mb-3">
         <Card.Body>

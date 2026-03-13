@@ -124,8 +124,14 @@ function BaseDetail() {
     }
   };
 
-  if (loading) return <div className="text-center mt-5"><Spinner animation="border" /></div>;
-  if (!base) return <p>Base not found.</p>;
+  if (loading) return <div className="page-spinner"><Spinner animation="border" variant="primary" /></div>;
+  if (!base) return (
+    <div className="empty-state">
+      <h6>Base not found</h6>
+      <p>The mixing base you're looking for doesn't exist.</p>
+      <Link to="/series" className="btn btn-primary btn-sm mt-2">Back to Series</Link>
+    </div>
+  );
 
   const lab = base.concentrations?.find(c => c.lab_values)?.lab_values;
 
@@ -223,8 +229,7 @@ function BaseDetail() {
         <Modal.Body>
           <div
             {...getRootProps()}
-            className={`border border-2 rounded p-5 text-center ${isDragActive ? 'border-primary bg-light' : 'border-dashed'}`}
-            style={{ cursor: 'pointer' }}
+            className={`dropzone-area ${isDragActive ? 'active' : ''}`}
           >
             <input {...getInputProps()} />
             {uploading ? (

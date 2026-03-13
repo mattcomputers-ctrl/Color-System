@@ -84,7 +84,10 @@ function CustomMatchNew() {
 
   return (
     <div>
-      <div className="page-header"><h2>New Custom Color Match</h2></div>
+      <div className="page-header">
+        <h2>New Custom Color Match</h2>
+        <p className="text-muted mb-0" style={{ fontSize: '0.875rem' }}>Match a target color from LAB values or a CXF measurement file</p>
+      </div>
 
       <Row>
         <Col md={6}>
@@ -181,11 +184,14 @@ function CustomMatchNew() {
                 </Tab>
 
                 <Tab eventKey="cxf" title="Upload CXF File">
-                  <div {...getRootProps()} className={`border border-2 rounded p-4 text-center mb-3 ${isDragActive ? 'border-primary bg-light' : ''}`} style={{ cursor: 'pointer' }}>
+                  <div {...getRootProps()} className={`dropzone-area mb-3 ${isDragActive ? 'active' : ''}`}>
                     <input {...getInputProps()} />
                     {cxfFile
-                      ? <p className="mb-0">{cxfFile.name}</p>
-                      : <p className="mb-0 text-muted">Drop CXF file here or click to select</p>
+                      ? <p className="mb-0 fw-medium">{cxfFile.name}</p>
+                      : <>
+                          <div className="dropzone-icon">+</div>
+                          <p>Drop a CXF file here or click to select</p>
+                        </>
                     }
                   </div>
                   <Form.Group className="mb-3">
