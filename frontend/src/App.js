@@ -15,6 +15,7 @@ import FormulaDetail from './components/pantone/FormulaDetail';
 import CustomMatchNew from './components/custom/CustomMatchNew';
 import CustomMatchList from './components/custom/CustomMatchList';
 import CustomMatchDetail from './components/custom/CustomMatchDetail';
+import SubstrateList from './components/substrates/SubstrateList';
 import UserManagement from './components/admin/UserManagement';
 import AuditLog from './components/admin/AuditLog';
 
@@ -67,6 +68,7 @@ function App() {
             <Route path="/series" element={<SeriesList />} />
             <Route path="/series/:id" element={<SeriesDetail />} />
             <Route path="/bases/:id" element={<BaseDetail />} />
+            <Route path="/substrates" element={<SubstrateList />} />
             <Route path="/pantone/targets" element={<PantoneTargets />} />
             <Route path="/pantone/formulas" element={<PantoneFormulas />} />
             <Route path="/pantone/formulate" element={<PantoneFormulate />} />

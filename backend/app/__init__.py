@@ -45,6 +45,7 @@ def create_app(config_name=None):
     from app.api.bases import bases_bp
     from app.api.pantone import pantone_bp
     from app.api.custom_match import custom_match_bp
+    from app.api.substrates import substrates_bp
     from app.api.admin import admin_bp
     from app.api.export import export_bp
 
@@ -54,11 +55,12 @@ def create_app(config_name=None):
     app.register_blueprint(bases_bp, url_prefix=f'{api_prefix}/bases')
     app.register_blueprint(pantone_bp, url_prefix=f'{api_prefix}/pantone')
     app.register_blueprint(custom_match_bp, url_prefix=f'{api_prefix}/custom-match')
+    app.register_blueprint(substrates_bp, url_prefix=f'{api_prefix}/substrates')
     app.register_blueprint(admin_bp, url_prefix=f'{api_prefix}/admin')
     app.register_blueprint(export_bp, url_prefix=f'{api_prefix}/export')
 
     # Exempt API blueprints from CSRF (they use JWT)
-    for bp in [auth_bp, series_bp, bases_bp, pantone_bp, custom_match_bp, admin_bp, export_bp]:
+    for bp in [auth_bp, series_bp, bases_bp, pantone_bp, custom_match_bp, substrates_bp, admin_bp, export_bp]:
         csrf.exempt(bp)
 
     return app

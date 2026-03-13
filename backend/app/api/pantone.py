@@ -285,7 +285,8 @@ def formulate():
         return jsonify({'error': 'Target has no color data'}), 400
 
     # Load colorant data from bases in this series
-    colorants, substrate_ks = _load_series_colorants(series_id)
+    substrate_id = data.get('substrate_id')
+    colorants, substrate_ks = _load_series_colorants(series_id, substrate_id=substrate_id)
     if not colorants:
         return jsonify({'error': 'No bases with spectral data in this series'}), 400
 
@@ -376,7 +377,8 @@ def formulate_all():
         return jsonify({'error': 'Ink series not found'}), 404
 
     # Load colorants once for the whole batch
-    colorants, substrate_ks = _load_series_colorants(series_id)
+    substrate_id = data.get('substrate_id')
+    colorants, substrate_ks = _load_series_colorants(series_id, substrate_id=substrate_id)
     if not colorants:
         return jsonify({'error': 'No bases with spectral data in this series'}), 400
 
@@ -509,17 +511,30 @@ def approve_formula(formula_id):
     return jsonify({'formula': formula.to_dict()})
 
 
-def _load_series_colorants(series_id):
+def _load_series_colorants(series_id, substrate_id=None):
     """Load colorant data for all active bases in a series.
+
+    Args:
+        series_id: The ink series to load bases from.
+        substrate_id: Optional substrate ID. If provided, its K/S values are used
+            as the substrate instead of auto-detecting from white bases.
 
     Returns:
         Tuple of (list[ColorantData], substrate_ks).
-        substrate_ks is derived from the first base that appears to be a white/transparent base,
+        substrate_ks is derived from the selected substrate, the first white base,
         or a default white if none found.
     """
+    from app.models.substrate import Substrate
+
     bases = MixingBase.query.filter_by(series_id=series_id, is_active=True).all()
     colorants = []
     substrate_ks = None
+
+    # Use explicit substrate if provided
+    if substrate_id:
+        substrate = db.session.get(Substrate, substrate_id)
+        if substrate and substrate.ks_values:
+            substrate_ks = np.array(substrate.ks_values)
 
     for base in bases:
         # Use the highest concentration level with spectral data
@@ -536,12 +551,13 @@ def _load_series_colorants(series_id):
 
         ks = np.array(spectral.ks_values)
 
-        # Detect substrate/white base (very low K/S = high reflectance = white)
-        code_lower = base.code.lower()
-        is_white = any(w in code_lower for w in ['white', 'transparent', 'substrate', 'tl', 'tw'])
-        if is_white and substrate_ks is None:
-            substrate_ks = ks
-            # Still include white as a colorant (it's part of the formula)
+        # Detect substrate/white base only if no explicit substrate was provided
+        if substrate_ks is None:
+            code_lower = base.code.lower()
+            is_white = any(w in code_lower for w in ['white', 'transparent', 'substrate', 'tl', 'tw'])
+            if is_white:
+                substrate_ks = ks
+                # Still include white as a colorant (it's part of the formula)
 
         colorants.append(ColorantData(
             base_id=base.id,

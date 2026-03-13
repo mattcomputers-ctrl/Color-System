@@ -4,6 +4,7 @@ from app.models.base import MixingBase, MixingBaseConcentration, BaseSpectralDat
 from app.models.upload import UploadedFile
 from app.models.pantone import PantoneTarget, PantoneFormula, PantoneFormulaComponent
 from app.models.custom_match import CustomMatchJob, CustomMatchResult, CustomMatchComponent
+from app.models.substrate import Substrate
 from app.models.audit import AuditLog
 
 __all__ = [
@@ -13,5 +14,6 @@ __all__ = [
     'UploadedFile',
     'PantoneTarget', 'PantoneFormula', 'PantoneFormulaComponent',
     'CustomMatchJob', 'CustomMatchResult', 'CustomMatchComponent',
+    'Substrate',
     'AuditLog',
 ]

@@ -139,7 +139,8 @@ def match_from_lab():
     db.session.flush()
 
     # Run formulation
-    colorants, substrate_ks = _load_series_colorants(series_id)
+    substrate_id = data.get('substrate_id')
+    colorants, substrate_ks = _load_series_colorants(series_id, substrate_id=substrate_id)
     if not colorants:
         job.status = 'failed'
         db.session.commit()
@@ -246,7 +247,8 @@ def match_from_cxf():
     db.session.flush()
 
     # Run formulation
-    colorants, substrate_ks = _load_series_colorants(series_id)
+    substrate_id = request.form.get('substrate_id', type=int)
+    colorants, substrate_ks = _load_series_colorants(series_id, substrate_id=substrate_id)
     if not colorants:
         job.status = 'failed'
         db.session.commit()

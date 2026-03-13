@@ -3,13 +3,15 @@ import { Card, Form, Button, Spinner, Row, Col, Table, Tabs, Tab } from 'react-b
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useDropzone } from 'react-dropzone';
-import { customMatchAPI, seriesAPI } from '../../services/api';
+import { customMatchAPI, seriesAPI, substratesAPI } from '../../services/api';
 import { labToApproxHex, getDeltaEClass, getDeltaELabel } from '../../utils/helpers';
 
 function CustomMatchNew() {
   const navigate = useNavigate();
   const [series, setSeries] = useState([]);
+  const [substrates, setSubstrates] = useState([]);
   const [selectedSeries, setSelectedSeries] = useState('');
+  const [selectedSubstrate, setSelectedSubstrate] = useState('');
   const [mode, setMode] = useState('lab');
   const [labForm, setLabForm] = useState({
     lab_l: '', lab_a: '', lab_b: '',
@@ -22,6 +24,7 @@ function CustomMatchNew() {
 
   useEffect(() => {
     seriesAPI.list({ active_only: 'true' }).then(res => setSeries(res.data.series));
+    substratesAPI.list({ active_only: 'true' }).then(res => setSubstrates(res.data.substrates));
   }, []);
 
   const handleLabMatch = async (e) => {
@@ -32,6 +35,7 @@ function CustomMatchNew() {
     try {
       const res = await customMatchAPI.matchFromLab({
         series_id: parseInt(selectedSeries),
+        substrate_id: selectedSubstrate ? parseInt(selectedSubstrate) : null,
         lab_l: parseFloat(labForm.lab_l),
         lab_a: parseFloat(labForm.lab_a),
         lab_b: parseFloat(labForm.lab_b),
@@ -58,6 +62,7 @@ function CustomMatchNew() {
       const formData = new FormData();
       formData.append('file', cxfFile);
       formData.append('series_id', selectedSeries);
+      if (selectedSubstrate) formData.append('substrate_id', selectedSubstrate);
       Object.entries(cxfMeta).forEach(([k, v]) => { if (v) formData.append(k, v); });
       const res = await customMatchAPI.matchFromCxf(formData);
       setResult(res.data.job);
@@ -91,6 +96,21 @@ function CustomMatchNew() {
                   <option value="">Select an ink series...</option>
                   {series.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </Form.Select>
+              </Form.Group>
+
+              <Form.Group className="mb-3">
+                <Form.Label>Substrate</Form.Label>
+                <Form.Select value={selectedSubstrate} onChange={e => setSelectedSubstrate(e.target.value)}>
+                  <option value="">Auto-detect from series (default)</option>
+                  {substrates.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}{s.substrate_type ? ` (${s.substrate_type})` : ''}
+                    </option>
+                  ))}
+                </Form.Select>
+                <Form.Text className="text-muted">
+                  Override the substrate used for formulation calculations
+                </Form.Text>
               </Form.Group>
 
               <Tabs activeKey={mode} onSelect={setMode} className="mb-3">

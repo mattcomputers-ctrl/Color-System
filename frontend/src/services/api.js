@@ -82,12 +82,25 @@ export const pantoneAPI = {
     }),
   listFormulas: (params = {}) => api.get('/pantone/formulas', { params }),
   getFormula: (id) => api.get(`/pantone/formulas/${id}`),
-  formulate: (targetId, seriesId) =>
-    api.post('/pantone/formulate', { target_id: targetId, series_id: seriesId }),
-  formulateAll: (seriesId, library = null) =>
-    api.post('/pantone/formulate-all', { series_id: seriesId, library }, { timeout: 600000 }),
+  formulate: (targetId, seriesId, substrateId = null) =>
+    api.post('/pantone/formulate', { target_id: targetId, series_id: seriesId, substrate_id: substrateId }),
+  formulateAll: (seriesId, library = null, substrateId = null) =>
+    api.post('/pantone/formulate-all', { series_id: seriesId, library, substrate_id: substrateId }, { timeout: 600000 }),
   approveFormula: (id, notes = '') =>
     api.post(`/pantone/formulas/${id}/approve`, { notes }),
+};
+
+// Substrates
+export const substratesAPI = {
+  list: (params = {}) => api.get('/substrates', { params }),
+  get: (id) => api.get(`/substrates/${id}`),
+  create: (data) => api.post('/substrates', data),
+  createFromCxf: (formData) =>
+    api.post('/substrates', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  update: (id, data) => api.put(`/substrates/${id}`, data),
+  delete: (id) => api.delete(`/substrates/${id}`),
 };
 
 // Custom Match

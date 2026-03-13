@@ -18,6 +18,7 @@ function Layout({ user, onLogout }) {
 
           <div className="section-label">Ink Management</div>
           <NavLink to="/series" className="nav-link">Ink Series</NavLink>
+          <NavLink to="/substrates" className="nav-link">Substrates</NavLink>
 
           <div className="section-label">Pantone</div>
           <NavLink to="/pantone/targets" className="nav-link">Pantone Targets</NavLink>

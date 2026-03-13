@@ -2,14 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { Card, Form, Button, Spinner, Row, Col, Alert, Table } from 'react-bootstrap';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { pantoneAPI, seriesAPI } from '../../services/api';
+import { pantoneAPI, seriesAPI, substratesAPI } from '../../services/api';
 import { labToApproxHex, getDeltaEClass, getDeltaELabel } from '../../utils/helpers';
 
 function PantoneFormulate() {
   const navigate = useNavigate();
   const [series, setSeries] = useState([]);
+  const [substrates, setSubstrates] = useState([]);
   const [targets, setTargets] = useState([]);
   const [selectedSeries, setSelectedSeries] = useState('');
+  const [selectedSubstrate, setSelectedSubstrate] = useState('');
   const [selectedTarget, setSelectedTarget] = useState('');
   const [targetSearch, setTargetSearch] = useState('');
   const [formulating, setFormulating] = useState(false);
@@ -17,6 +19,7 @@ function PantoneFormulate() {
 
   useEffect(() => {
     seriesAPI.list({ active_only: 'true' }).then(res => setSeries(res.data.series));
+    substratesAPI.list({ active_only: 'true' }).then(res => setSubstrates(res.data.substrates));
   }, []);
 
   useEffect(() => {
@@ -34,7 +37,11 @@ function PantoneFormulate() {
     setFormulating(true);
     setResult(null);
     try {
-      const res = await pantoneAPI.formulate(parseInt(selectedTarget), parseInt(selectedSeries));
+      const res = await pantoneAPI.formulate(
+        parseInt(selectedTarget),
+        parseInt(selectedSeries),
+        selectedSubstrate ? parseInt(selectedSubstrate) : null
+      );
       setResult(res.data.formula);
       toast.success('Formula generated successfully');
     } catch (err) {
@@ -92,6 +99,24 @@ function PantoneFormulate() {
                     <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
                   ))}
                 </Form.Select>
+              </Form.Group>
+
+              <Form.Group className="mb-3">
+                <Form.Label>Substrate</Form.Label>
+                <Form.Select
+                  value={selectedSubstrate}
+                  onChange={e => setSelectedSubstrate(e.target.value)}
+                >
+                  <option value="">Auto-detect from series (default)</option>
+                  {substrates.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}{s.substrate_type ? ` (${s.substrate_type})` : ''}
+                    </option>
+                  ))}
+                </Form.Select>
+                <Form.Text className="text-muted">
+                  Override the substrate used for formulation calculations
+                </Form.Text>
               </Form.Group>
 
               {target && (
