@@ -49,6 +49,10 @@ export const seriesAPI = {
   create: (data) => api.post('/series', data),
   update: (id, data) => api.put(`/series/${id}`, data),
   delete: (id) => api.delete(`/series/${id}`),
+  listSubstrates: (seriesId) => api.get(`/series/${seriesId}/substrates`),
+  addSubstrate: (seriesId, data) => api.post(`/series/${seriesId}/substrates`, data),
+  updateSubstrate: (seriesId, assocId, data) => api.put(`/series/${seriesId}/substrates/${assocId}`, data),
+  removeSubstrate: (seriesId, assocId) => api.delete(`/series/${seriesId}/substrates/${assocId}`),
 };
 
 // Bases
@@ -112,6 +116,15 @@ export const customMatchAPI = {
     api.post('/custom-match/match-cxf', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+};
+
+// Tolerance Profiles
+export const toleranceAPI = {
+  list: (params = {}) => api.get('/tolerance-profiles', { params }),
+  get: (id) => api.get(`/tolerance-profiles/${id}`),
+  create: (data) => api.post('/tolerance-profiles', data),
+  update: (id, data) => api.put(`/tolerance-profiles/${id}`, data),
+  delete: (id) => api.delete(`/tolerance-profiles/${id}`),
 };
 
 // Admin

@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import { useDropzone } from 'react-dropzone';
 import { substratesAPI } from '../../services/api';
 import { labToApproxHex, formatDate } from '../../utils/helpers';
+import SpectralChart from '../common/SpectralChart';
 
 function SubstrateList() {
   const [substrates, setSubstrates] = useState([]);
@@ -14,6 +15,8 @@ function SubstrateList() {
   const [cxfFile, setCxfFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [spectralData, setSpectralData] = useState(null);
+  const [showSpectral, setShowSpectral] = useState(false);
 
   const loadSubstrates = async () => {
     try {
@@ -139,6 +142,17 @@ function SubstrateList() {
                   </td>
                   <td className="text-muted small">{formatDate(s.created_at)}</td>
                   <td>
+                    {s.has_spectral && (
+                      <Button variant="outline-info" size="sm" className="me-1" onClick={async () => {
+                        try {
+                          const res = await substratesAPI.get(s.id);
+                          setSpectralData(res.data.substrate);
+                          setShowSpectral(true);
+                        } catch { toast.error('Failed to load spectral data'); }
+                      }}>
+                        Spectral
+                      </Button>
+                    )}
                     <Button variant="outline-primary" size="sm" className="me-1" onClick={() => openModal(s)}>
                       Edit
                     </Button>
@@ -251,6 +265,30 @@ function SubstrateList() {
             Deactivate
           </Button>
         </Modal.Footer>
+      </Modal>
+
+      {/* Spectral Data Modal */}
+      <Modal show={showSpectral} onHide={() => setShowSpectral(false)} size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>Spectral Reflectance — {spectralData?.code}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {spectralData?.spectral_reflectance ? (
+            <SpectralChart
+              spectra={[{ label: spectralData.code, values: spectralData.spectral_reflectance, color: '#2563eb' }]}
+              height={350}
+            />
+          ) : (
+            <p className="text-muted text-center">No spectral data available.</p>
+          )}
+          {spectralData?.lab_values && (
+            <div className="text-center mt-3">
+              <span className="me-3">L* {spectralData.lab_values.L?.toFixed(2)}</span>
+              <span className="me-3">a* {spectralData.lab_values.a?.toFixed(2)}</span>
+              <span>b* {spectralData.lab_values.b?.toFixed(2)}</span>
+            </div>
+          )}
+        </Modal.Body>
       </Modal>
     </div>
   );

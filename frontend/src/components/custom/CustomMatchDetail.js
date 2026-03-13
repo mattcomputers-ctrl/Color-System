@@ -4,6 +4,8 @@ import { Card, Table, Button, Spinner, Row, Col, Badge } from 'react-bootstrap';
 import { toast } from 'react-toastify';
 import { customMatchAPI, exportAPI } from '../../services/api';
 import { labToApproxHex, getDeltaEClass, getDeltaELabel, formatDate, downloadBlob } from '../../utils/helpers';
+import SpectralChart from '../common/SpectralChart';
+import MetamerismPanel from '../common/MetamerismPanel';
 
 function CustomMatchDetail() {
   const { id } = useParams();
@@ -149,8 +151,33 @@ function CustomMatchDetail() {
         </Card>
       )}
 
+      {/* Spectral Comparison Chart */}
+      {job.target_spectral && job.results?.[0]?.predicted_spectral && (
+        <Card className="mb-4">
+          <Card.Header><strong>Spectral Reflectance</strong></Card.Header>
+          <Card.Body>
+            <SpectralChart
+              spectra={[
+                { label: 'Target', values: job.target_spectral, color: '#2563eb' },
+                ...(job.results || []).slice(0, 3).map((r, i) => ({
+                  label: `Formula #${i + 1}`,
+                  values: r.predicted_spectral,
+                  color: ['#dc2626', '#16a34a', '#9333ea'][i],
+                })),
+              ]}
+              height={300}
+            />
+          </Card.Body>
+        </Card>
+      )}
+
+      {/* Metamerism for best result */}
+      {job.results?.[0]?.metamerism && (
+        <MetamerismPanel metamerism={job.results[0].metamerism} />
+      )}
+
       {job.results?.map((result, ri) => (
-        <Card className="mb-3" key={result.id}>
+        <Card className="mb-3 mt-3" key={result.id}>
           <Card.Header>
             <strong>Formula #{ri + 1}</strong>
             <span className={`ms-3 delta-e-badge ${getDeltaEClass(result.delta_e_2000)}`}>

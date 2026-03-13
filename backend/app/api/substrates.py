@@ -51,7 +51,7 @@ def get_substrate(substrate_id):
     substrate = db.session.get(Substrate, substrate_id)
     if not substrate:
         return jsonify({'error': 'Substrate not found'}), 404
-    return jsonify({'substrate': substrate.to_dict()})
+    return jsonify({'substrate': substrate.to_dict(include_spectral=True)})
 
 
 @substrates_bp.route('', methods=['POST'])

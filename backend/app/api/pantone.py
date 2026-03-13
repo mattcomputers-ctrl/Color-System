@@ -12,7 +12,7 @@ from app.models.base import MixingBase, MixingBaseConcentration, BaseSpectralDat
 from app.models.upload import UploadedFile
 from app.models.audit import AuditLog
 from app.services.cxf_parser import CxfParser
-from app.services.color_science import spectral_to_lab, reflectance_to_ks
+from app.services.color_science import spectral_to_lab, reflectance_to_ks, metamerism_index
 from app.services.formulation_engine import FormulationEngine, ColorantData
 from app.utils.auth import login_required, role_required, get_current_user
 from app.utils.file_handler import allowed_file, save_upload
@@ -244,6 +244,17 @@ def get_formula(formula_id):
     fd = formula.to_dict()
     fd['target'] = formula.target.to_dict() if formula.target else None
     fd['series_name'] = formula.series.name if formula.series else None
+
+    # Compute metamerism if both target and predicted spectral data exist
+    target = formula.target
+    if (target and target.spectral_reflectance and formula.predicted_spectral):
+        try:
+            target_R = np.array(target.spectral_reflectance)
+            predicted_R = np.array(formula.predicted_spectral)
+            fd['metamerism'] = metamerism_index(target_R, predicted_R)
+        except Exception:
+            pass
+
     return jsonify({'formula': fd})
 
 

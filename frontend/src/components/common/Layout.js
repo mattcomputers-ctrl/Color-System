@@ -33,6 +33,13 @@ function Layout({ user, onLogout }) {
             <NavLink to="/custom-match/new" className="nav-link">New Match</NavLink>
           )}
 
+          {(isAdmin || canFormulate) && (
+            <>
+              <div className="section-label">Settings</div>
+              <NavLink to="/admin/tolerance-profiles" className="nav-link">Tolerance Profiles</NavLink>
+            </>
+          )}
+
           {isAdmin && (
             <>
               <div className="section-label">Admin</div>

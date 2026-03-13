@@ -217,24 +217,108 @@ def delta_e_2000(lab1: tuple, lab2: tuple) -> float:
     return float(dE)
 
 
+# CIE D65 illuminant SPD (360-780nm, 10nm interval) — display/general use
+# Source: CIE 15:2004
+# fmt: off
+D65_SPD = np.array([
+    38.68, 44.87, 54.65, 68.70, 82.75, 87.12, 91.49, 92.46,
+    93.43, 99.54, 95.59, 104.86, 104.59, 105.08, 104.36, 100.00,
+    96.33, 95.79, 88.69, 90.01, 89.60, 87.70, 83.29, 83.70,
+    80.03, 80.21, 82.28, 78.28, 74.00, 69.72, 70.67, 68.36,
+    66.09, 65.10, 63.38, 62.44, 59.47, 56.61, 57.33, 54.92,
+    52.62, 58.27, 60.28
+])
+
+# CIE Illuminant A SPD (360-780nm, 10nm interval) — tungsten/incandescent
+# Source: CIE 15:2004
+A_SPD = np.array([
+    6.14, 7.19, 8.42, 9.84, 11.45, 13.28, 15.34, 17.64,
+    20.22, 23.07, 26.22, 29.68, 33.47, 37.60, 42.09, 46.94,
+    52.18, 57.80, 63.82, 70.24, 77.07, 84.33, 92.01, 100.12,
+    108.66, 117.64, 127.05, 136.91, 147.20, 157.93, 169.10, 180.71,
+    192.75, 205.22, 218.12, 231.44, 245.18, 259.33, 273.89, 288.84,
+    304.19, 319.93, 336.05
+])
+# fmt: on
+
+# Pre-compute D65 and A white points
+_k65 = 100.0 / np.sum(D65_SPD * CMF_Y)
+D65_XN = np.sum(D65_SPD * CMF_X) * _k65
+D65_YN = 100.0
+D65_ZN = np.sum(D65_SPD * CMF_Z) * _k65
+
+_kA = 100.0 / np.sum(A_SPD * CMF_Y)
+A_XN = np.sum(A_SPD * CMF_X) * _kA
+A_YN = 100.0
+A_ZN = np.sum(A_SPD * CMF_Z) * _kA
+
+# Illuminant registry for easy lookup
+ILLUMINANTS = {
+    'D50': {'spd': D50_SPD, 'Xn': D50_XN, 'Yn': D50_YN, 'Zn': D50_ZN},
+    'D65': {'spd': D65_SPD, 'Xn': D65_XN, 'Yn': D65_YN, 'Zn': D65_ZN},
+    'A':   {'spd': A_SPD,   'Xn': A_XN,   'Yn': A_YN,   'Zn': A_ZN},
+}
+
+
+def spectral_to_lab_illuminant(reflectance: np.ndarray, illuminant: str = 'D50') -> tuple:
+    """Convert spectral reflectance to CIELAB under a specified illuminant."""
+    ill = ILLUMINANTS[illuminant]
+    r = np.asarray(reflectance, dtype=float)
+    k = 100.0 / np.sum(ill['spd'] * CMF_Y)
+    X = k * np.sum(ill['spd'] * r * CMF_X)
+    Y = k * np.sum(ill['spd'] * r * CMF_Y)
+    Z = k * np.sum(ill['spd'] * r * CMF_Z)
+    return xyz_to_lab(X, Y, Z, ill['Xn'], ill['Yn'], ill['Zn'])
+
+
+def metamerism_index(reflectance1: np.ndarray, reflectance2: np.ndarray,
+                     illuminants: list = None) -> dict:
+    """Compute metamerism index between two spectra across illuminants.
+
+    Two colors may match under one illuminant but diverge under another.
+    Returns dE00 under each illuminant pair.
+
+    Args:
+        reflectance1: First spectral reflectance (43 values).
+        reflectance2: Second spectral reflectance (43 values).
+        illuminants: List of illuminant names (default: D50, D65, A).
+
+    Returns:
+        Dict with 'illuminants' (per-illuminant dE00) and 'metamerism_risk' flag.
+    """
+    if illuminants is None:
+        illuminants = ['D50', 'D65', 'A']
+
+    results = {}
+    for ill_name in illuminants:
+        lab1 = spectral_to_lab_illuminant(reflectance1, ill_name)
+        lab2 = spectral_to_lab_illuminant(reflectance2, ill_name)
+        de = delta_e_2000(lab1, lab2)
+        results[ill_name] = {
+            'lab1': {'L': round(lab1[0], 2), 'a': round(lab1[1], 2), 'b': round(lab1[2], 2)},
+            'lab2': {'L': round(lab2[0], 2), 'a': round(lab2[1], 2), 'b': round(lab2[2], 2)},
+            'delta_e_2000': round(de, 4),
+        }
+
+    de_values = [v['delta_e_2000'] for v in results.values()]
+    max_spread = max(de_values) - min(de_values) if len(de_values) > 1 else 0.0
+
+    return {
+        'illuminants': results,
+        'max_spread': round(max_spread, 4),
+        'metamerism_risk': 'high' if max_spread > 2.0 else 'moderate' if max_spread > 1.0 else 'low',
+    }
+
+
 def reflectance_to_ks(reflectance: np.ndarray) -> np.ndarray:
-    """Convert reflectance to Kubelka-Munk K/S values.
+    """Convert reflectance to Kubelka-Munk K/S values (single-constant).
 
     K/S = (1 - R)² / (2R)
 
-    This is the single-constant Kubelka-Munk function, which assumes
-    complete hiding (opaque layer). For transparent/translucent inks,
-    the two-constant theory is more appropriate but requires
-    transmission measurements.
-
-    Args:
-        reflectance: Array of reflectance values (0-1 range).
-
-    Returns:
-        Array of K/S values.
+    Assumes complete hiding (opaque layer). Used for litho inks.
+    For thin/transparent films (flexo), use two-constant theory.
     """
     R = np.asarray(reflectance, dtype=float)
-    # Clamp to avoid division by zero and negative values
     R = np.clip(R, 0.005, 0.995)
     return (1.0 - R) ** 2 / (2.0 * R)
 
@@ -243,14 +327,95 @@ def ks_to_reflectance(ks: np.ndarray) -> np.ndarray:
     """Convert K/S values back to reflectance.
 
     R = 1 + K/S - sqrt((K/S)² + 2·K/S)
-
-    Args:
-        ks: Array of K/S values.
-
-    Returns:
-        Array of reflectance values.
     """
     ks = np.asarray(ks, dtype=float)
     ks = np.maximum(ks, 0.0)
     R = 1.0 + ks - np.sqrt(ks**2 + 2.0 * ks)
+    return np.clip(R, 0.005, 0.995)
+
+
+def two_constant_km_reflectance(K: np.ndarray, S: np.ndarray,
+                                 film_thickness: float = 1.0) -> np.ndarray:
+    """Two-constant Kubelka-Munk reflectance for translucent films.
+
+    For thin ink films (flexo, gravure) where the substrate shows through,
+    the single-constant theory is insufficient. This computes reflectance
+    using separate absorption (K) and scattering (S) coefficients.
+
+    R = (1 - R_inf²) / (e^(S·d·(1/R_inf - R_inf)) - R_inf²)
+
+    where R_inf = 1 + K/S - sqrt((K/S)² + 2K/S) (infinite thickness reflectance)
+    and d = film_thickness.
+
+    For thick films (d → ∞), this converges to single-constant K/S.
+
+    Args:
+        K: Absorption coefficient array (43 wavelengths).
+        S: Scattering coefficient array (43 wavelengths).
+        film_thickness: Relative film thickness (1.0 = reference thickness).
+
+    Returns:
+        Reflectance array (43 values, 0-1 range).
+    """
+    K = np.asarray(K, dtype=float)
+    S = np.asarray(S, dtype=float)
+    S = np.maximum(S, 1e-10)  # avoid division by zero
+
+    ks_ratio = K / S
+    # R_inf is the reflectance at infinite thickness
+    R_inf = 1.0 + ks_ratio - np.sqrt(ks_ratio**2 + 2.0 * ks_ratio)
+    R_inf = np.clip(R_inf, 0.001, 0.999)
+
+    a = S * film_thickness * (1.0 / R_inf - R_inf)
+    # Clamp to prevent overflow in exp
+    a = np.clip(a, -500, 500)
+
+    R = (1.0 - R_inf**2) / (np.exp(a) - R_inf**2)
+    return np.clip(R, 0.005, 0.995)
+
+
+def two_constant_km_over_substrate(K: np.ndarray, S: np.ndarray,
+                                    substrate_R: np.ndarray,
+                                    film_thickness: float = 1.0) -> np.ndarray:
+    """Two-constant K-M reflectance of a translucent film over a substrate.
+
+    For flexo/gravure where the ink film is thin and the substrate affects
+    the final appearance.
+
+    R_total = R_film + T_film² * R_sub / (1 - R_film_internal * R_sub)
+
+    This uses the simplified Kubelka-Munk hyperbolic solution for a finite
+    layer backed by a substrate.
+
+    Args:
+        K: Absorption coefficient array (43 wavelengths).
+        S: Scattering coefficient array (43 wavelengths).
+        substrate_R: Substrate reflectance array (43 values).
+        film_thickness: Relative film thickness.
+
+    Returns:
+        Combined reflectance array (43 values).
+    """
+    K = np.asarray(K, dtype=float)
+    S = np.asarray(S, dtype=float)
+    substrate_R = np.asarray(substrate_R, dtype=float)
+    S = np.maximum(S, 1e-10)
+
+    ks_ratio = K / S
+    a_km = 1.0 + ks_ratio  # Kubelka-Munk 'a' parameter
+    b_km = np.sqrt(np.maximum(a_km**2 - 1.0, 0.0))  # 'b' parameter
+    b_km = np.maximum(b_km, 1e-10)
+
+    bSd = b_km * S * film_thickness
+    bSd = np.clip(bSd, -500, 500)
+
+    sinh_bSd = np.sinh(bSd)
+    cosh_bSd = np.cosh(bSd)
+
+    Rg = np.clip(substrate_R, 0.005, 0.995)
+
+    denom = b_km * cosh_bSd + (a_km - Rg) * sinh_bSd
+    denom = np.where(np.abs(denom) < 1e-10, 1e-10, denom)
+
+    R = (Rg * (b_km * cosh_bSd - a_km * sinh_bSd) + sinh_bSd) / denom
     return np.clip(R, 0.005, 0.995)

@@ -48,6 +48,7 @@ def create_app(config_name=None):
     from app.api.substrates import substrates_bp
     from app.api.admin import admin_bp
     from app.api.export import export_bp
+    from app.api.tolerance import tolerance_bp
 
     api_prefix = '/api/v1'
     app.register_blueprint(auth_bp, url_prefix=f'{api_prefix}/auth')
@@ -58,9 +59,11 @@ def create_app(config_name=None):
     app.register_blueprint(substrates_bp, url_prefix=f'{api_prefix}/substrates')
     app.register_blueprint(admin_bp, url_prefix=f'{api_prefix}/admin')
     app.register_blueprint(export_bp, url_prefix=f'{api_prefix}/export')
+    app.register_blueprint(tolerance_bp, url_prefix=f'{api_prefix}/tolerance-profiles')
 
     # Exempt API blueprints from CSRF (they use JWT)
-    for bp in [auth_bp, series_bp, bases_bp, pantone_bp, custom_match_bp, substrates_bp, admin_bp, export_bp]:
+    for bp in [auth_bp, series_bp, bases_bp, pantone_bp, custom_match_bp,
+               substrates_bp, admin_bp, export_bp, tolerance_bp]:
         csrf.exempt(bp)
 
     return app

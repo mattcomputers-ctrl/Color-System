@@ -5,18 +5,26 @@
  *   < 2.0  = perceptible but acceptable
  *   >= 2.0 = noticeable difference
  */
-export function getDeltaEClass(deltaE) {
+export function getDeltaEClass(deltaE, profile = null) {
   if (deltaE === null || deltaE === undefined) return '';
-  if (deltaE < 1.0) return 'delta-e-good';
-  if (deltaE < 2.0) return 'delta-e-acceptable';
+  const excellent = profile?.de_excellent ?? 0.5;
+  const good = profile?.de_good ?? 1.0;
+  const acceptable = profile?.de_acceptable ?? 2.0;
+  if (deltaE <= excellent) return 'delta-e-excellent';
+  if (deltaE <= good) return 'delta-e-good';
+  if (deltaE <= acceptable) return 'delta-e-acceptable';
   return 'delta-e-poor';
 }
 
-export function getDeltaELabel(deltaE) {
+export function getDeltaELabel(deltaE, profile = null) {
   if (deltaE === null || deltaE === undefined) return 'N/A';
-  if (deltaE < 1.0) return 'Excellent';
-  if (deltaE < 2.0) return 'Acceptable';
-  return 'Review';
+  const excellent = profile?.de_excellent ?? 0.5;
+  const good = profile?.de_good ?? 1.0;
+  const acceptable = profile?.de_acceptable ?? 2.0;
+  if (deltaE <= excellent) return 'Excellent';
+  if (deltaE <= good) return 'Good';
+  if (deltaE <= acceptable) return 'Acceptable';
+  return 'Out of Tolerance';
 }
 
 /**

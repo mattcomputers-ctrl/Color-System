@@ -18,6 +18,7 @@ import CustomMatchDetail from './components/custom/CustomMatchDetail';
 import SubstrateList from './components/substrates/SubstrateList';
 import UserManagement from './components/admin/UserManagement';
 import AuditLog from './components/admin/AuditLog';
+import ToleranceProfiles from './components/admin/ToleranceProfiles';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -77,6 +78,7 @@ function App() {
             <Route path="/custom-match" element={<CustomMatchList />} />
             <Route path="/custom-match/:id" element={<CustomMatchDetail />} />
             <Route path="/admin/users" element={<UserManagement />} />
+            <Route path="/admin/tolerance-profiles" element={<ToleranceProfiles />} />
             <Route path="/admin/audit-log" element={<AuditLog />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Route>

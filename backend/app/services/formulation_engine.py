@@ -66,6 +66,8 @@ from app.services.color_science import (
     spectral_to_lab,
     delta_e_76,
     delta_e_2000,
+    two_constant_km_over_substrate,
+    metamerism_index,
 )
 
 logger = logging.getLogger(__name__)
@@ -92,12 +94,18 @@ class ColorantData:
         name: Base name.
         ks_spectrum: K/S spectrum of the colorant (substrate-corrected).
         concentration_pct: Concentration at which the K/S data was measured.
+        cost_per_kg: Cost per kilogram (optional, for cost optimization).
+        k_spectrum: Absorption coefficient array for two-constant K-M (optional).
+        s_spectrum: Scattering coefficient array for two-constant K-M (optional).
     """
     base_id: int
     code: str
     name: str
     ks_spectrum: np.ndarray  # Shape: (43,)
     concentration_pct: float
+    cost_per_kg: float = 0.0
+    k_spectrum: np.ndarray = None
+    s_spectrum: np.ndarray = None
 
 
 @dataclass
@@ -122,6 +130,8 @@ class FormulationResult:
     delta_e_2000: float = 0.0
     iterations: int = 0
     error_message: str = ''
+    total_cost_per_kg: float = 0.0
+    metamerism: dict = field(default_factory=dict)
 
 
 class FormulationEngine:
@@ -149,9 +159,25 @@ class FormulationEngine:
     """
 
     def __init__(self, batch_size: float = DEFAULT_BATCH_SIZE,
-                 max_bases: int = MAX_BASES_PER_FORMULA):
+                 max_bases: int = MAX_BASES_PER_FORMULA,
+                 formulation_mode: str = 'opaque',
+                 film_thickness: float = 1.0,
+                 cost_weight: float = 0.0):
+        """
+        Args:
+            batch_size: Default batch size in grams.
+            max_bases: Maximum colorants per formula.
+            formulation_mode: 'opaque' (litho, single-constant K-M) or
+                              'translucent' (flexo, two-constant K-M).
+            film_thickness: Relative film thickness for translucent mode.
+            cost_weight: Weight for cost in objective (0=ignore, 0.1=light, 0.5=heavy).
+                         Final objective = dE2000 + cost_weight * normalized_cost.
+        """
         self.batch_size = batch_size
         self.max_bases = max_bases
+        self.formulation_mode = formulation_mode
+        self.film_thickness = film_thickness
+        self.cost_weight = cost_weight
 
     def formulate(
         self,
@@ -159,6 +185,7 @@ class FormulationEngine:
         target_lab: tuple = None,
         colorants: list[ColorantData] = None,
         substrate_ks: np.ndarray = None,
+        substrate_reflectance: np.ndarray = None,
         max_components: int = None,
     ) -> FormulationResult:
         """Generate an optimal formula to match a target color.
@@ -171,7 +198,8 @@ class FormulationEngine:
             target_reflectance: Target spectral reflectance (43 values, 360-780nm).
             target_lab: Target CIELAB values (L*, a*, b*) — used if no spectral data.
             colorants: List of available colorants with K/S data.
-            substrate_ks: K/S spectrum of the substrate/white base.
+            substrate_ks: K/S spectrum of the substrate/white base (opaque mode).
+            substrate_reflectance: Substrate reflectance array (translucent mode).
             max_components: Max number of colorants in formula (default: self.max_bases).
 
         Returns:
@@ -184,11 +212,24 @@ class FormulationEngine:
             )
 
         if substrate_ks is None:
-            # Use a default white substrate (R ≈ 0.9 across spectrum)
             substrate_ks = reflectance_to_ks(np.full(NUM_WAVELENGTHS, 0.9))
             logger.warning('No substrate K/S provided, using default white substrate')
 
+        if substrate_reflectance is None:
+            substrate_reflectance = np.full(NUM_WAVELENGTHS, 0.9)
+
         max_components = max_components or self.max_bases
+        use_two_constant = (self.formulation_mode == 'translucent')
+
+        # Check if two-constant data is available for translucent mode
+        if use_two_constant:
+            has_two_constant = all(
+                c.k_spectrum is not None and c.s_spectrum is not None
+                for c in colorants
+            )
+            if not has_two_constant:
+                logger.warning('Two-constant K/S data not available, falling back to opaque mode')
+                use_two_constant = False
 
         # Determine target
         if target_reflectance is not None:
@@ -212,30 +253,46 @@ class FormulationEngine:
 
         n = len(colorants)
 
-        # Build K/S matrix: each column is a colorant's K/S spectrum
+        # Build matrices
         ks_matrix = np.column_stack([c.ks_spectrum for c in colorants])
+        costs = np.array([c.cost_per_kg for c in colorants])
+        max_cost = np.max(costs) if np.any(costs > 0) else 1.0
 
-        # Objective function: minimize CIEDE2000
+        if use_two_constant:
+            k_matrix = np.column_stack([c.k_spectrum for c in colorants])
+            s_matrix = np.column_stack([c.s_spectrum for c in colorants])
+            sub_R = np.asarray(substrate_reflectance, dtype=float)
+
+        # Objective function
         def objective(concentrations):
-            predicted_ks = substrate_ks + ks_matrix @ concentrations
-            predicted_R = ks_to_reflectance(predicted_ks)
+            if use_two_constant:
+                K_mix = k_matrix @ concentrations
+                S_mix = s_matrix @ concentrations
+                predicted_R = two_constant_km_over_substrate(
+                    K_mix, S_mix, sub_R, self.film_thickness
+                )
+            else:
+                predicted_ks = substrate_ks + ks_matrix @ concentrations
+                predicted_R = ks_to_reflectance(predicted_ks)
+
             predicted_lab = spectral_to_lab(predicted_R)
-            return delta_e_2000(target_lab_computed, predicted_lab)
+            de = delta_e_2000(target_lab_computed, predicted_lab)
+
+            # Cost penalty
+            if self.cost_weight > 0 and max_cost > 0:
+                cost = np.dot(concentrations, costs) / max_cost
+                return de + self.cost_weight * cost
+            return de
 
         # Constraints: concentrations sum to 1.0
         constraints = [{'type': 'eq', 'fun': lambda c: np.sum(c) - 1.0}]
-
-        # Bounds: each concentration between 0 and 1
         bounds = [(0.0, 1.0)] * n
-
-        # Initial guess: equal parts
         x0 = np.ones(n) / n
 
         # Try a smarter initial guess based on spectral similarity
-        if target_ks is not None:
+        if target_ks is not None and not use_two_constant:
             x0_smart = self._smart_initial_guess(ks_matrix, target_ks - substrate_ks, n)
             if x0_smart is not None:
-                # Try both and pick the better one
                 try:
                     result_equal = minimize(
                         objective, x0, method='SLSQP',
@@ -293,16 +350,33 @@ class FormulationEngine:
                 c.percentage = round(c.percentage * scale, 4)
                 c.weight_grams = round(c.percentage / 100.0 * self.batch_size, 2)
 
-        # Sort by percentage descending
         components.sort(key=lambda c: c.percentage, reverse=True)
 
         # Calculate predicted color
-        predicted_ks = substrate_ks + ks_matrix @ concentrations
-        predicted_R = ks_to_reflectance(predicted_ks)
-        predicted_lab = spectral_to_lab(predicted_R)
+        if use_two_constant:
+            K_mix = k_matrix @ concentrations
+            S_mix = s_matrix @ concentrations
+            predicted_R = two_constant_km_over_substrate(
+                K_mix, S_mix, sub_R, self.film_thickness
+            )
+        else:
+            predicted_ks = substrate_ks + ks_matrix @ concentrations
+            predicted_R = ks_to_reflectance(predicted_ks)
 
+        predicted_lab = spectral_to_lab(predicted_R)
         de76 = delta_e_76(target_lab_computed, predicted_lab)
         de2000 = delta_e_2000(target_lab_computed, predicted_lab)
+
+        # Calculate total cost per kg
+        total_cost = float(np.dot(concentrations, costs))
+
+        # Compute metamerism index if we have spectral data
+        met = {}
+        if target_reflectance is not None and len(predicted_R) == NUM_WAVELENGTHS:
+            try:
+                met = metamerism_index(target_reflectance, predicted_R)
+            except Exception:
+                pass
 
         return FormulationResult(
             success=True,
@@ -313,6 +387,8 @@ class FormulationEngine:
             delta_e_76=round(de76, 4),
             delta_e_2000=round(de2000, 4),
             iterations=opt_result.nit if hasattr(opt_result, 'nit') else 0,
+            total_cost_per_kg=round(total_cost, 2),
+            metamerism=met,
         )
 
     def formulate_multi(
@@ -321,6 +397,7 @@ class FormulationEngine:
         target_lab: tuple = None,
         colorants: list[ColorantData] = None,
         substrate_ks: np.ndarray = None,
+        substrate_reflectance: np.ndarray = None,
         num_results: int = 3,
     ) -> list[FormulationResult]:
         """Generate multiple formula alternatives.
@@ -336,6 +413,7 @@ class FormulationEngine:
             target_lab=target_lab,
             colorants=colorants,
             substrate_ks=substrate_ks,
+            substrate_reflectance=substrate_reflectance,
         )
         if result.success:
             results.append(result)
@@ -351,9 +429,9 @@ class FormulationEngine:
                     target_lab=target_lab,
                     colorants=subset,
                     substrate_ks=substrate_ks,
+                    substrate_reflectance=substrate_reflectance,
                 )
                 if result.success:
-                    # Only add if meaningfully different from existing results
                     is_different = all(
                         abs(result.delta_e_2000 - r.delta_e_2000) > 0.1
                         for r in results
@@ -361,7 +439,6 @@ class FormulationEngine:
                     if is_different:
                         results.append(result)
 
-        # Sort by delta E
         results.sort(key=lambda r: r.delta_e_2000)
         return results[:num_results]
 

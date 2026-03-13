@@ -52,8 +52,8 @@ class Substrate(db.Model):
             return {'L': self.lab_l, 'a': self.lab_a, 'b': self.lab_b}
         return None
 
-    def to_dict(self):
-        return {
+    def to_dict(self, include_spectral=False):
+        d = {
             'id': self.id,
             'name': self.name,
             'code': self.code,
@@ -66,6 +66,9 @@ class Substrate(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
+        if include_spectral and self.spectral_reflectance:
+            d['spectral_reflectance'] = self.spectral_reflectance
+        return d
 
     def __repr__(self):
         return f'<Substrate {self.code}: {self.name}>'

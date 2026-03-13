@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Card, Table, Button, Modal, Form, Spinner, Badge, Row, Col } from 'react-bootstrap';
 import { toast } from 'react-toastify';
-import { seriesAPI, basesAPI } from '../../services/api';
+import { seriesAPI, basesAPI, substratesAPI } from '../../services/api';
 import { labToApproxHex, formatDate } from '../../utils/helpers';
 
 function SeriesDetail() {
@@ -16,17 +16,25 @@ function SeriesDetail() {
   const [baseForm, setBaseForm] = useState({ code: '', name: '', color_index: '', notes: '' });
   const [saving, setSaving] = useState(false);
   const [showEditSeries, setShowEditSeries] = useState(false);
-  const [seriesForm, setSeriesForm] = useState({ name: '', description: '' });
+  const [seriesForm, setSeriesForm] = useState({ name: '', description: '', ink_type: 'litho' });
   const [deleteConfirm, setDeleteConfirm] = useState(null); // 'series' | base_id | null
+  const [substrateAssocs, setSubstrateAssocs] = useState([]);
+  const [allSubstrates, setAllSubstrates] = useState([]);
+  const [showSubstrateModal, setShowSubstrateModal] = useState(false);
+  const [selectedSubstrate, setSelectedSubstrate] = useState('');
 
   const loadData = async () => {
     try {
-      const [seriesRes, basesRes] = await Promise.all([
+      const [seriesRes, basesRes, assocRes, subsRes] = await Promise.all([
         seriesAPI.get(id),
         basesAPI.listBySeries(id, { include_concentrations: 'true' }),
+        seriesAPI.listSubstrates(id),
+        substratesAPI.list({ active_only: 'true' }),
       ]);
       setSeries(seriesRes.data.series);
       setBases(basesRes.data.bases);
+      setSubstrateAssocs(assocRes.data.substrates);
+      setAllSubstrates(subsRes.data.substrates);
     } catch (err) {
       toast.error('Failed to load series data');
     } finally {
@@ -81,7 +89,7 @@ function SeriesDetail() {
 
   // --- Series CRUD ---
   const openEditSeries = () => {
-    setSeriesForm({ name: series.name, description: series.description || '' });
+    setSeriesForm({ name: series.name, description: series.description || '', ink_type: series.ink_type || 'litho' });
     setShowEditSeries(true);
   };
 
@@ -134,6 +142,9 @@ function SeriesDetail() {
           </div>
         </div>
         {series.description && <p className="text-muted">{series.description}</p>}
+        {series.ink_type && (
+          <Badge bg="info" className="me-2">{series.ink_type === 'flexo' ? 'Flexo' : 'Litho'}</Badge>
+        )}
       </div>
 
       <Row className="mb-3">
@@ -152,6 +163,88 @@ function SeriesDetail() {
           </Card>
         </Col>
       </Row>
+
+      {/* Substrate Associations */}
+      <Card className="mb-4">
+        <Card.Header className="d-flex justify-content-between align-items-center">
+          <strong>Associated Substrates</strong>
+          <Button variant="outline-primary" size="sm" onClick={() => {
+            setSelectedSubstrate('');
+            setShowSubstrateModal(true);
+          }}>+ Add Substrate</Button>
+        </Card.Header>
+        <Card.Body className="p-0">
+          {substrateAssocs.length > 0 ? (
+            <Table hover className="mb-0" size="sm">
+              <thead>
+                <tr><th>Code</th><th>Name</th><th>Type</th><th>Default</th><th>Actions</th></tr>
+              </thead>
+              <tbody>
+                {substrateAssocs.map(a => (
+                  <tr key={a.id}>
+                    <td><strong>{a.substrate?.code}</strong></td>
+                    <td>{a.substrate?.name}</td>
+                    <td className="text-muted">{a.substrate?.substrate_type || '—'}</td>
+                    <td>
+                      {a.is_default ? (
+                        <Badge bg="primary">Default</Badge>
+                      ) : (
+                        <Button variant="link" size="sm" className="p-0" onClick={async () => {
+                          await seriesAPI.updateSubstrate(id, a.id, { is_default: true });
+                          loadData();
+                        }}>Set Default</Button>
+                      )}
+                    </td>
+                    <td>
+                      <Button variant="outline-danger" size="sm" onClick={async () => {
+                        await seriesAPI.removeSubstrate(id, a.id);
+                        toast.success('Substrate removed');
+                        loadData();
+                      }}>Remove</Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          ) : (
+            <p className="text-muted text-center p-3 mb-0">No substrates associated. Add one to set a default for formulations.</p>
+          )}
+        </Card.Body>
+      </Card>
+
+      {/* Add Substrate Association Modal */}
+      <Modal show={showSubstrateModal} onHide={() => setShowSubstrateModal(false)}>
+        <Modal.Header closeButton><Modal.Title>Add Substrate to Series</Modal.Title></Modal.Header>
+        <Modal.Body>
+          <Form.Group>
+            <Form.Label>Substrate</Form.Label>
+            <Form.Select value={selectedSubstrate} onChange={e => setSelectedSubstrate(e.target.value)}>
+              <option value="">Select a substrate...</option>
+              {allSubstrates
+                .filter(s => !substrateAssocs.find(a => a.substrate_id === s.id))
+                .map(s => (
+                  <option key={s.id} value={s.id}>{s.code} — {s.name}</option>
+                ))}
+            </Form.Select>
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowSubstrateModal(false)}>Cancel</Button>
+          <Button variant="primary" disabled={!selectedSubstrate} onClick={async () => {
+            try {
+              await seriesAPI.addSubstrate(id, {
+                substrate_id: parseInt(selectedSubstrate),
+                is_default: substrateAssocs.length === 0,
+              });
+              toast.success('Substrate added');
+              setShowSubstrateModal(false);
+              loadData();
+            } catch (err) {
+              toast.error(err.response?.data?.error || 'Failed to add substrate');
+            }
+          }}>Add</Button>
+        </Modal.Footer>
+      </Modal>
 
       <Card>
         <Card.Header className="d-flex justify-content-between align-items-center">
@@ -278,13 +371,26 @@ function SeriesDetail() {
                 required
               />
             </Form.Group>
-            <Form.Group>
+            <Form.Group className="mb-3">
               <Form.Label>Description</Form.Label>
               <Form.Control
                 as="textarea" rows={3}
                 value={seriesForm.description}
                 onChange={e => setSeriesForm({ ...seriesForm, description: e.target.value })}
               />
+            </Form.Group>
+            <Form.Group>
+              <Form.Label>Ink Type</Form.Label>
+              <Form.Select
+                value={seriesForm.ink_type}
+                onChange={e => setSeriesForm({ ...seriesForm, ink_type: e.target.value })}
+              >
+                <option value="litho">Litho (Opaque)</option>
+                <option value="flexo">Flexo (Translucent)</option>
+              </Form.Select>
+              <Form.Text className="text-muted">
+                Litho uses single-constant K-M; Flexo uses two-constant K-M for thin films
+              </Form.Text>
             </Form.Group>
           </Modal.Body>
           <Modal.Footer>

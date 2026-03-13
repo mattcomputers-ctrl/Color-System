@@ -4,6 +4,8 @@ import { Card, Table, Button, Spinner, Row, Col, Badge } from 'react-bootstrap';
 import { toast } from 'react-toastify';
 import { pantoneAPI, exportAPI } from '../../services/api';
 import { labToApproxHex, getDeltaEClass, getDeltaELabel, formatDate, downloadBlob } from '../../utils/helpers';
+import SpectralChart from '../common/SpectralChart';
+import MetamerismPanel from '../common/MetamerismPanel';
 
 function FormulaDetail() {
   const { id } = useParams();
@@ -154,7 +156,26 @@ function FormulaDetail() {
         </Col>
       </Row>
 
-      <Card>
+      {/* Spectral Comparison Chart */}
+      {(formula.predicted_spectral || target.spectral_reflectance) && (
+        <Card className="mb-4">
+          <Card.Header><strong>Spectral Reflectance</strong></Card.Header>
+          <Card.Body>
+            <SpectralChart
+              spectra={[
+                ...(target.spectral_reflectance ? [{ label: 'Target', values: target.spectral_reflectance, color: '#2563eb' }] : []),
+                ...(formula.predicted_spectral ? [{ label: 'Predicted', values: formula.predicted_spectral, color: '#dc2626' }] : []),
+              ]}
+              height={300}
+            />
+          </Card.Body>
+        </Card>
+      )}
+
+      {/* Metamerism Analysis */}
+      {formula.metamerism && <MetamerismPanel metamerism={formula.metamerism} />}
+
+      <Card className="mt-3">
         <Card.Header><strong>Formula Components</strong></Card.Header>
         <Card.Body className="p-0">
           <Table className="mb-0 formula-table">
