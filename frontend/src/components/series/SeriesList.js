@@ -19,7 +19,7 @@ function SeriesList() {
       const res = await seriesAPI.list();
       setSeries(res.data.series);
     } catch (err) {
-      toast.error('Failed to load ink series');
+      toast.error(err.serverMessage || 'Failed to load ink series');
     } finally {
       setLoading(false);
     }

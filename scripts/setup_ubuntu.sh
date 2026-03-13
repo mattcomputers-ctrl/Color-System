@@ -142,6 +142,42 @@ sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_US
 sudo -u postgres psql -d "${DB_NAME}" -c "GRANT ALL ON SCHEMA public TO ${DB_USER};" > /dev/null 2>&1
 sudo -u postgres psql -d "${DB_NAME}" -c "ALTER SCHEMA public OWNER TO ${DB_USER};" > /dev/null 2>&1
 
+# Verify the app user can connect with the generated password
+if PGPASSWORD="${DB_PASS}" psql -U "${DB_USER}" -h 127.0.0.1 -d "${DB_NAME}" -c "SELECT 1" > /dev/null 2>&1; then
+    echo "  Database connection verified."
+else
+    echo ""
+    echo "  WARNING: Cannot connect to database as ${DB_USER}."
+    echo "  Checking PostgreSQL authentication settings..."
+    echo ""
+    # Ensure pg_hba.conf allows password auth for local TCP connections
+    PG_HBA=$(sudo -u postgres psql -tAc "SHOW hba_file" 2>/dev/null)
+    if [[ -n "$PG_HBA" ]]; then
+        # Add a rule for our user if one doesn't exist
+        if ! grep -q "colorformulation" "$PG_HBA" 2>/dev/null; then
+            echo "  Adding password authentication rule to pg_hba.conf..."
+            # Insert before the first 'host' line so our rule takes priority
+            sed -i "/^# IPv4 local connections:/a host    ${DB_NAME}    ${DB_USER}    127.0.0.1/32    md5" "$PG_HBA" 2>/dev/null \
+                || echo "host    ${DB_NAME}    ${DB_USER}    127.0.0.1/32    md5" >> "$PG_HBA"
+            systemctl reload postgresql
+            sleep 1
+        fi
+    fi
+
+    # Retry connection
+    if PGPASSWORD="${DB_PASS}" psql -U "${DB_USER}" -h 127.0.0.1 -d "${DB_NAME}" -c "SELECT 1" > /dev/null 2>&1; then
+        echo "  Database connection verified (after pg_hba fix)."
+    else
+        echo "  ERROR: Still cannot connect. Check pg_hba.conf manually:"
+        echo "    ${PG_HBA:-/etc/postgresql/*/main/pg_hba.conf}"
+        echo "  Ensure this line exists:"
+        echo "    host  ${DB_NAME}  ${DB_USER}  127.0.0.1/32  md5"
+        echo ""
+        echo "  Then run: sudo systemctl reload postgresql"
+        exit 1
+    fi
+fi
+
 # ============================================================================
 # STEP 4: Create system user and directories
 # ============================================================================
@@ -501,13 +537,22 @@ else
     ALL_OK=false
 fi
 
-# Test the API responds
+# Test database connectivity via health endpoint
 sleep 1
-API_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1/api/v1/auth/me 2>/dev/null || echo "000")
-if [[ "$API_CODE" == "401" ]]; then
-    printf "    %-24s OK\n" "API (auth check)"
+HEALTH_RESP=$(curl -s http://127.0.0.1/api/v1/health 2>/dev/null || echo '{"error":"unreachable"}')
+HEALTH_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1/api/v1/health 2>/dev/null || echo "000")
+if [[ "$HEALTH_CODE" == "200" ]]; then
+    printf "    %-24s OK\n" "API + Database"
 else
-    printf "    %-24s FAILED (HTTP ${API_CODE})\n" "API (auth check)"
+    printf "    %-24s FAILED (HTTP ${HEALTH_CODE})\n" "API + Database"
+    echo ""
+    echo "    Health check response: ${HEALTH_RESP}"
+    echo ""
+    echo "    Troubleshooting:"
+    echo "      1. Check PostgreSQL:  sudo systemctl status postgresql"
+    echo "      2. Check Gunicorn:    sudo journalctl -u colorformulation -n 20 --no-pager"
+    echo "      3. Test DB manually:  sudo -u ${APP_USER} psql -d ${DB_NAME} -c 'SELECT 1'"
+    echo ""
     ALL_OK=false
 fi
 

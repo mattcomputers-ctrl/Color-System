@@ -7,11 +7,15 @@ import { formatDate, getDeltaEClass } from '../../utils/helpers';
 function Dashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     adminAPI.getDashboardStats()
       .then(res => setStats(res.data))
-      .catch(err => console.error('Failed to load dashboard stats:', err))
+      .catch(err => {
+        console.error('Failed to load dashboard stats:', err);
+        setError(err.serverMessage || err.response?.data?.error || 'Failed to connect to server');
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -23,7 +27,10 @@ function Dashboard() {
     <div className="empty-state">
       <div className="empty-icon">!</div>
       <h6>Unable to load dashboard</h6>
-      <p>Please check that the server is running and refresh the page.</p>
+      <p>{error || 'Please check that the server is running and refresh the page.'}</p>
+      <p className="text-muted" style={{ fontSize: '0.8125rem' }}>
+        Check: <code>sudo systemctl status colorformulation</code> and <code>sudo systemctl status postgresql</code>
+      </p>
     </div>
   );
 

@@ -48,6 +48,11 @@ def get_current_user() -> User | None:
             return user
     except (jwt.ExpiredSignatureError, jwt.InvalidTokenError):
         pass
+    except Exception:
+        # Database errors (connection refused, etc.) — let them propagate
+        # so the global error handler returns a proper JSON 503 response
+        # instead of silently treating it as "not authenticated".
+        raise
 
     return None
 

@@ -19,8 +19,8 @@ function ToleranceProfiles() {
     try {
       const res = await toleranceAPI.list();
       setProfiles(res.data.profiles);
-    } catch {
-      toast.error('Failed to load tolerance profiles');
+    } catch (err) {
+      toast.error(err.serverMessage || 'Failed to load tolerance profiles');
     } finally {
       setLoading(false);
     }

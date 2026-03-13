@@ -16,7 +16,7 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Handle 401 responses
+// Handle error responses
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -27,9 +27,22 @@ api.interceptors.response.use(
         window.location.href = '/login';
       }
     }
+    // Ensure error.message contains the server error if available
+    if (error.response?.data?.error) {
+      error.serverMessage = error.response.data.error;
+    } else if (error.response?.status === 503) {
+      error.serverMessage = 'Database connection error. Check server configuration.';
+    } else if (!error.response) {
+      error.serverMessage = 'Cannot reach the server. Check that the service is running.';
+    }
     return Promise.reject(error);
   }
 );
+
+// Health check — tests database connectivity
+export const healthAPI = {
+  check: () => api.get('/health'),
+};
 
 // Auth
 export const authAPI = {

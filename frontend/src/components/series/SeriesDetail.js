@@ -36,7 +36,7 @@ function SeriesDetail() {
       setSubstrateAssocs(assocRes.data.substrates);
       setAllSubstrates(subsRes.data.substrates);
     } catch (err) {
-      toast.error('Failed to load series data');
+      toast.error(err.serverMessage || 'Failed to load series data');
     } finally {
       setLoading(false);
     }

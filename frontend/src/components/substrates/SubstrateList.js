@@ -23,7 +23,7 @@ function SubstrateList() {
       const res = await substratesAPI.list();
       setSubstrates(res.data.substrates);
     } catch (err) {
-      toast.error('Failed to load substrates');
+      toast.error(err.serverMessage || 'Failed to load substrates');
     } finally {
       setLoading(false);
     }

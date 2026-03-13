@@ -39,6 +39,10 @@ def create_app(config_name=None):
     # Ensure upload directory exists
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+    # --- Global JSON error handlers ---
+    # Ensures ALL errors return JSON (not HTML) so the frontend can parse them.
+    _register_error_handlers(app)
+
     # Register blueprints
     from app.api.auth import auth_bp
     from app.api.series import series_bp
@@ -49,6 +53,7 @@ def create_app(config_name=None):
     from app.api.admin import admin_bp
     from app.api.export import export_bp
     from app.api.tolerance import tolerance_bp
+    from app.api.health import health_bp
 
     api_prefix = '/api/v1'
     app.register_blueprint(auth_bp, url_prefix=f'{api_prefix}/auth')
@@ -60,13 +65,60 @@ def create_app(config_name=None):
     app.register_blueprint(admin_bp, url_prefix=f'{api_prefix}/admin')
     app.register_blueprint(export_bp, url_prefix=f'{api_prefix}/export')
     app.register_blueprint(tolerance_bp, url_prefix=f'{api_prefix}/tolerance-profiles')
+    app.register_blueprint(health_bp, url_prefix=f'{api_prefix}/health')
 
     # Exempt API blueprints from CSRF (they use JWT)
     for bp in [auth_bp, series_bp, bases_bp, pantone_bp, custom_match_bp,
-               substrates_bp, admin_bp, export_bp, tolerance_bp]:
+               substrates_bp, admin_bp, export_bp, tolerance_bp, health_bp]:
         csrf.exempt(bp)
 
     return app
+
+
+def _register_error_handlers(app):
+    """Register global error handlers that always return JSON."""
+    from flask import jsonify
+    from sqlalchemy.exc import OperationalError, IntegrityError
+
+    @app.errorhandler(OperationalError)
+    def handle_db_error(e):
+        app.logger.error(f'Database error: {e}')
+        return jsonify({
+            'error': 'Database connection error. Please check the server configuration.',
+            'details': 'The application cannot reach the database. '
+                        'Verify PostgreSQL is running and DATABASE_URL is correct.',
+        }), 503
+
+    @app.errorhandler(IntegrityError)
+    def handle_integrity_error(e):
+        db.session.rollback()
+        app.logger.error(f'Integrity error: {e}')
+        return jsonify({
+            'error': 'Data integrity error. A duplicate or invalid value was detected.',
+        }), 409
+
+    @app.errorhandler(404)
+    def handle_not_found(e):
+        return jsonify({'error': 'Resource not found'}), 404
+
+    @app.errorhandler(405)
+    def handle_method_not_allowed(e):
+        return jsonify({'error': 'Method not allowed'}), 405
+
+    @app.errorhandler(500)
+    def handle_internal_error(e):
+        app.logger.error(f'Internal server error: {e}')
+        return jsonify({
+            'error': 'Internal server error. Check the server logs for details.',
+        }), 500
+
+    @app.errorhandler(Exception)
+    def handle_unexpected_error(e):
+        app.logger.error(f'Unexpected error: {type(e).__name__}: {e}')
+        return jsonify({
+            'error': f'Unexpected server error: {type(e).__name__}',
+            'details': str(e),
+        }), 500
 
 
 def _configure_logging(app):
