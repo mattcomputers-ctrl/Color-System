@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Card, Table, Button, Modal, Form, Spinner, Badge, Row, Col } from 'react-bootstrap';
 import { toast } from 'react-toastify';
 import { toleranceAPI } from '../../services/api';
-import { formatDate } from '../../utils/helpers';
 
 function ToleranceProfiles() {
   const [profiles, setProfiles] = useState([]);
@@ -77,33 +76,55 @@ function ToleranceProfiles() {
     }
   };
 
-  if (loading) return <div className="text-center mt-5"><Spinner animation="border" /></div>;
+  if (loading) return <div className="page-spinner"><Spinner animation="border" variant="primary" /></div>;
 
   return (
     <div>
       <div className="page-header d-flex justify-content-between align-items-center">
-        <h2>Tolerance Profiles</h2>
+        <div>
+          <h2>Tolerance Profiles</h2>
+          <p className="text-muted mb-0" style={{ fontSize: '0.875rem' }}>
+            Define dE2000 thresholds for color matching acceptance criteria
+          </p>
+        </div>
         <Button variant="primary" onClick={() => openModal()}>+ New Profile</Button>
       </div>
 
       <Card>
         <Card.Body className="p-0">
-          <Table hover className="mb-0">
+          <Table hover>
             <thead>
               <tr>
-                <th>Name</th><th>Customer</th>
-                <th>Excellent</th><th>Good</th><th>Acceptable</th>
-                <th>Default</th><th>Status</th><th>Actions</th>
+                <th>Name</th>
+                <th>Customer</th>
+                <th style={{ width: 110 }}>Excellent</th>
+                <th style={{ width: 110 }}>Good</th>
+                <th style={{ width: 110 }}>Acceptable</th>
+                <th style={{ width: 90 }}>Default</th>
+                <th style={{ width: 90 }}>Status</th>
+                <th style={{ width: 80 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {profiles.map(p => (
                 <tr key={p.id}>
-                  <td><strong>{p.name}</strong></td>
-                  <td className="text-muted">{p.customer_name || '—'}</td>
-                  <td><Badge bg="success">&le; {p.de_excellent}</Badge></td>
-                  <td><Badge bg="info">&le; {p.de_good}</Badge></td>
-                  <td><Badge bg="warning" text="dark">&le; {p.de_acceptable}</Badge></td>
+                  <td className="fw-semibold">{p.name}</td>
+                  <td className="text-muted">{p.customer_name || '--'}</td>
+                  <td>
+                    <Badge style={{ backgroundColor: '#dcfce7', color: '#166534' }}>
+                      dE &le; {p.de_excellent}
+                    </Badge>
+                  </td>
+                  <td>
+                    <Badge style={{ backgroundColor: '#d1fae5', color: '#065f46' }}>
+                      dE &le; {p.de_good}
+                    </Badge>
+                  </td>
+                  <td>
+                    <Badge style={{ backgroundColor: '#fef3c7', color: '#92400e' }}>
+                      dE &le; {p.de_acceptable}
+                    </Badge>
+                  </td>
                   <td>{p.is_default && <Badge bg="primary">Default</Badge>}</td>
                   <td>
                     <Badge bg={p.is_active ? 'success' : 'secondary'}>
@@ -118,22 +139,27 @@ function ToleranceProfiles() {
                 </tr>
               ))}
               {profiles.length === 0 && (
-                <tr><td colSpan="8" className="text-center text-muted p-4">
-                  No tolerance profiles yet. Create one to define custom dE thresholds.
-                </td></tr>
+                <tr>
+                  <td colSpan="8">
+                    <div className="empty-state">
+                      <h6>No tolerance profiles yet</h6>
+                      <p>Create a profile to define custom dE thresholds for color acceptance.</p>
+                    </div>
+                  </td>
+                </tr>
               )}
             </tbody>
           </Table>
         </Card.Body>
       </Card>
 
-      <Modal show={showModal} onHide={() => setShowModal(false)} size="lg">
+      <Modal show={showModal} onHide={() => setShowModal(false)} size="lg" centered>
         <Modal.Header closeButton>
           <Modal.Title>{editProfile ? 'Edit Profile' : 'New Tolerance Profile'}</Modal.Title>
         </Modal.Header>
         <Form onSubmit={handleSave}>
           <Modal.Body>
-            <Row className="mb-3">
+            <Row className="g-3 mb-3">
               <Col md={6}>
                 <Form.Group>
                   <Form.Label>Profile Name</Form.Label>
@@ -156,52 +182,63 @@ function ToleranceProfiles() {
                 </Form.Group>
               </Col>
             </Row>
-            <Form.Group className="mb-3">
+            <Form.Group className="mb-4">
               <Form.Label>Description</Form.Label>
               <Form.Control
                 as="textarea" rows={2}
                 value={form.description}
                 onChange={e => setForm({ ...form, description: e.target.value })}
+                placeholder="Optional description..."
               />
             </Form.Group>
-            <h6>dE2000 Thresholds</h6>
-            <Row className="mb-3">
+
+            <h6 className="mb-3" style={{ fontWeight: 600 }}>dE2000 Thresholds</h6>
+            <Row className="g-3 mb-4">
               <Col md={4}>
                 <Form.Group>
-                  <Form.Label>Excellent (dE &le;)</Form.Label>
+                  <Form.Label>
+                    <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', backgroundColor: '#22c55e', marginRight: 6 }}></span>
+                    Excellent (dE &le;)
+                  </Form.Label>
                   <Form.Control
                     type="number" step="0.1" min="0"
                     value={form.de_excellent}
                     onChange={e => setForm({ ...form, de_excellent: e.target.value })}
                   />
-                  <Form.Text className="text-muted">Best match quality</Form.Text>
+                  <Form.Text>Best match quality</Form.Text>
                 </Form.Group>
               </Col>
               <Col md={4}>
                 <Form.Group>
-                  <Form.Label>Good (dE &le;)</Form.Label>
+                  <Form.Label>
+                    <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', backgroundColor: '#10b981', marginRight: 6 }}></span>
+                    Good (dE &le;)
+                  </Form.Label>
                   <Form.Control
                     type="number" step="0.1" min="0"
                     value={form.de_good}
                     onChange={e => setForm({ ...form, de_good: e.target.value })}
                   />
-                  <Form.Text className="text-muted">Acceptable for most work</Form.Text>
+                  <Form.Text>Acceptable for most work</Form.Text>
                 </Form.Group>
               </Col>
               <Col md={4}>
                 <Form.Group>
-                  <Form.Label>Acceptable (dE &le;)</Form.Label>
+                  <Form.Label>
+                    <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', backgroundColor: '#f59e0b', marginRight: 6 }}></span>
+                    Acceptable (dE &le;)
+                  </Form.Label>
                   <Form.Control
                     type="number" step="0.1" min="0"
                     value={form.de_acceptable}
                     onChange={e => setForm({ ...form, de_acceptable: e.target.value })}
                   />
-                  <Form.Text className="text-muted">Maximum tolerance</Form.Text>
+                  <Form.Text>Maximum tolerance</Form.Text>
                 </Form.Group>
               </Col>
             </Row>
             <Form.Check
-              type="checkbox"
+              type="switch"
               label="Set as default profile"
               checked={form.is_default}
               onChange={e => setForm({ ...form, is_default: e.target.checked })}

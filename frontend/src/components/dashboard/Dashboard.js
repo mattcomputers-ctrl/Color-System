@@ -16,17 +16,23 @@ function Dashboard() {
   }, []);
 
   if (loading) {
-    return <div className="text-center mt-5"><Spinner animation="border" /></div>;
+    return <div className="page-spinner"><Spinner animation="border" variant="primary" /></div>;
   }
 
-  if (!stats) return <p>Failed to load dashboard data.</p>;
+  if (!stats) return (
+    <div className="empty-state">
+      <div className="empty-icon">!</div>
+      <h6>Unable to load dashboard</h6>
+      <p>Please check that the server is running and refresh the page.</p>
+    </div>
+  );
 
   const statCards = [
-    { label: 'Ink Series', value: stats.total_series, link: '/series' },
-    { label: 'Mixing Bases', value: stats.total_bases, link: '/series' },
-    { label: 'Pantone Targets', value: stats.total_pantone_targets, link: '/pantone/targets' },
-    { label: 'Pantone Formulas', value: stats.total_pantone_formulas, link: '/pantone/formulas' },
-    { label: 'Custom Matches', value: stats.total_custom_matches, link: '/custom-match' },
+    { label: 'Ink Series', value: stats.total_series, link: '/series', color: '#3b82f6', bg: '#eff6ff' },
+    { label: 'Mixing Bases', value: stats.total_bases, link: '/series', color: '#8b5cf6', bg: '#f5f3ff' },
+    { label: 'Pantone Targets', value: stats.total_pantone_targets, link: '/pantone/targets', color: '#f59e0b', bg: '#fffbeb' },
+    { label: 'Formulas', value: stats.total_pantone_formulas, link: '/pantone/formulas', color: '#10b981', bg: '#ecfdf5' },
+    { label: 'Custom Matches', value: stats.total_custom_matches, link: '/custom-match', color: '#ec4899', bg: '#fdf2f8' },
   ];
 
   return (
@@ -35,11 +41,14 @@ function Dashboard() {
         <h2>Dashboard</h2>
       </div>
 
-      <Row className="mb-4">
+      <Row className="g-3 mb-4">
         {statCards.map((s, i) => (
-          <Col key={i} md={true} className="mb-3">
+          <Col key={i} xs={6} lg={true}>
             <Link to={s.link} className="text-decoration-none">
-              <Card className="stat-card p-3">
+              <Card className="stat-card">
+                <div className="stat-icon" style={{ backgroundColor: s.bg, color: s.color }}>
+                  {s.label.charAt(0)}
+                </div>
                 <div className="stat-value">{s.value}</div>
                 <div className="stat-label">{s.label}</div>
               </Card>
@@ -48,61 +57,86 @@ function Dashboard() {
         ))}
       </Row>
 
-      <Row>
-        <Col md={6} className="mb-4">
+      <Row className="g-4">
+        <Col lg={6}>
           <Card>
-            <Card.Header><strong>Recent Pantone Formulas</strong></Card.Header>
+            <Card.Header className="d-flex justify-content-between align-items-center">
+              <strong>Recent Formulas</strong>
+              <Link to="/pantone/formulas" className="text-decoration-none" style={{ fontSize: '0.8125rem' }}>
+                View all
+              </Link>
+            </Card.Header>
             <Card.Body className="p-0">
               {stats.recent_formulas?.length > 0 ? (
                 <Table hover className="mb-0">
                   <thead>
-                    <tr><th>Target</th><th>Series</th><th>DE*00</th><th>Date</th></tr>
+                    <tr>
+                      <th>Target</th>
+                      <th>Series</th>
+                      <th>dE*00</th>
+                      <th>Date</th>
+                    </tr>
                   </thead>
                   <tbody>
                     {stats.recent_formulas.map(f => (
                       <tr key={f.id}>
                         <td>
-                          <Link to={`/pantone/formulas/${f.id}`}>{f.target_code}</Link>
+                          <Link to={`/pantone/formulas/${f.id}`} className="fw-medium text-decoration-none">
+                            {f.target_code}
+                          </Link>
                         </td>
-                        <td>{f.series_name}</td>
+                        <td className="text-muted">{f.series_name}</td>
                         <td>
                           <span className={`delta-e-badge ${getDeltaEClass(f.delta_e_2000)}`}>
-                            {f.delta_e_2000?.toFixed(2) ?? '—'}
+                            {f.delta_e_2000?.toFixed(2) ?? '--'}
                           </span>
                         </td>
-                        <td className="text-muted small">{formatDate(f.created_at)}</td>
+                        <td className="text-muted">{formatDate(f.created_at)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </Table>
               ) : (
-                <p className="text-muted p-3 mb-0">No formulas generated yet.</p>
+                <div className="empty-state">
+                  <h6>No formulas yet</h6>
+                  <p>Generate your first Pantone formula to see results here.</p>
+                </div>
               )}
             </Card.Body>
           </Card>
         </Col>
 
-        <Col md={6} className="mb-4">
+        <Col lg={6}>
           <Card>
-            <Card.Header><strong>Recent Custom Matches</strong></Card.Header>
+            <Card.Header className="d-flex justify-content-between align-items-center">
+              <strong>Recent Matches</strong>
+              <Link to="/custom-match" className="text-decoration-none" style={{ fontSize: '0.8125rem' }}>
+                View all
+              </Link>
+            </Card.Header>
             <Card.Body className="p-0">
               {stats.recent_matches?.length > 0 ? (
                 <Table hover className="mb-0">
                   <thead>
-                    <tr><th>Job</th><th>Series</th><th>DE*00</th><th>Status</th></tr>
+                    <tr>
+                      <th>Job</th>
+                      <th>Series</th>
+                      <th>dE*00</th>
+                      <th>Status</th>
+                    </tr>
                   </thead>
                   <tbody>
                     {stats.recent_matches.map(j => (
                       <tr key={j.id}>
                         <td>
-                          <Link to={`/custom-match/${j.id}`}>
+                          <Link to={`/custom-match/${j.id}`} className="fw-medium text-decoration-none">
                             {j.job_name || `Job #${j.id}`}
                           </Link>
                         </td>
-                        <td>{j.series_name}</td>
+                        <td className="text-muted">{j.series_name}</td>
                         <td>
                           <span className={`delta-e-badge ${getDeltaEClass(j.best_delta_e)}`}>
-                            {j.best_delta_e?.toFixed(2) ?? '—'}
+                            {j.best_delta_e?.toFixed(2) ?? '--'}
                           </span>
                         </td>
                         <td>
@@ -115,7 +149,10 @@ function Dashboard() {
                   </tbody>
                 </Table>
               ) : (
-                <p className="text-muted p-3 mb-0">No custom matches yet.</p>
+                <div className="empty-state">
+                  <h6>No custom matches yet</h6>
+                  <p>Create a new color match to see results here.</p>
+                </div>
               )}
             </Card.Body>
           </Card>

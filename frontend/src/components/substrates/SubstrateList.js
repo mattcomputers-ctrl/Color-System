@@ -93,12 +93,17 @@ function SubstrateList() {
     maxFiles: 1,
   });
 
-  if (loading) return <div className="text-center mt-5"><Spinner animation="border" /></div>;
+  if (loading) return <div className="page-spinner"><Spinner animation="border" variant="primary" /></div>;
 
   return (
     <div>
       <div className="page-header d-flex justify-content-between align-items-center">
-        <h2>Substrates</h2>
+        <div>
+          <h2>Substrates</h2>
+          <p className="text-muted mb-0" style={{ fontSize: '0.875rem' }}>
+            Manage printing substrates with optional spectral reflectance data
+          </p>
+        </div>
         <Button variant="primary" onClick={() => openModal()}>
           + New Substrate
         </Button>
@@ -106,30 +111,36 @@ function SubstrateList() {
 
       <Card>
         <Card.Body className="p-0">
-          <Table hover className="mb-0">
+          <Table hover>
             <thead>
               <tr>
-                <th style={{ width: 40 }}></th>
-                <th>Code</th><th>Name</th><th>Type</th>
-                <th>Spectral</th><th>Status</th><th>Created</th><th>Actions</th>
+                <th style={{ width: 48 }}></th>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Type</th>
+                <th style={{ width: 80 }}>Spectral</th>
+                <th style={{ width: 90 }}>Status</th>
+                <th>Created</th>
+                <th style={{ width: 220 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {substrates.map(s => (
                 <tr key={s.id}>
                   <td>
-                    {s.lab_values ? (
-                      <div style={{
-                        backgroundColor: labToApproxHex(s.lab_values.L, s.lab_values.a, s.lab_values.b),
-                        width: 24, height: 24, borderRadius: 4, border: '1px solid #dee2e6',
-                      }} />
-                    ) : (
-                      <div style={{ width: 24, height: 24, borderRadius: 4, backgroundColor: '#f0f0f0', border: '1px solid #dee2e6' }} />
-                    )}
+                    <div
+                      className="color-swatch"
+                      style={{
+                        backgroundColor: s.lab_values
+                          ? labToApproxHex(s.lab_values.L, s.lab_values.a, s.lab_values.b)
+                          : '#f1f5f9',
+                        width: 28, height: 28,
+                      }}
+                    />
                   </td>
-                  <td><strong>{s.code}</strong></td>
+                  <td className="fw-semibold">{s.code}</td>
                   <td>{s.name}</td>
-                  <td className="text-muted">{s.substrate_type || '—'}</td>
+                  <td className="text-muted">{s.substrate_type || '--'}</td>
                   <td>
                     <Badge bg={s.has_spectral ? 'success' : 'secondary'}>
                       {s.has_spectral ? 'Yes' : 'No'}
@@ -140,32 +151,39 @@ function SubstrateList() {
                       {s.is_active ? 'Active' : 'Inactive'}
                     </Badge>
                   </td>
-                  <td className="text-muted small">{formatDate(s.created_at)}</td>
+                  <td className="text-muted">{formatDate(s.created_at)}</td>
                   <td>
-                    {s.has_spectral && (
-                      <Button variant="outline-info" size="sm" className="me-1" onClick={async () => {
-                        try {
-                          const res = await substratesAPI.get(s.id);
-                          setSpectralData(res.data.substrate);
-                          setShowSpectral(true);
-                        } catch { toast.error('Failed to load spectral data'); }
-                      }}>
-                        Spectral
+                    <div className="d-flex gap-2">
+                      {s.has_spectral && (
+                        <Button variant="outline-info" size="sm" onClick={async () => {
+                          try {
+                            const res = await substratesAPI.get(s.id);
+                            setSpectralData(res.data.substrate);
+                            setShowSpectral(true);
+                          } catch { toast.error('Failed to load spectral data'); }
+                        }}>
+                          Spectral
+                        </Button>
+                      )}
+                      <Button variant="outline-primary" size="sm" onClick={() => openModal(s)}>
+                        Edit
                       </Button>
-                    )}
-                    <Button variant="outline-primary" size="sm" className="me-1" onClick={() => openModal(s)}>
-                      Edit
-                    </Button>
-                    <Button variant="outline-danger" size="sm" onClick={() => setDeleteConfirm(s)}>
-                      Delete
-                    </Button>
+                      <Button variant="outline-danger" size="sm" onClick={() => setDeleteConfirm(s)}>
+                        Delete
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
               {substrates.length === 0 && (
-                <tr><td colSpan="8" className="text-center text-muted p-4">
-                  No substrates yet. Create one to get started.
-                </td></tr>
+                <tr>
+                  <td colSpan="8">
+                    <div className="empty-state">
+                      <h6>No substrates yet</h6>
+                      <p>Add a substrate to define printing surfaces for accurate color formulation.</p>
+                    </div>
+                  </td>
+                </tr>
               )}
             </tbody>
           </Table>
@@ -173,13 +191,13 @@ function SubstrateList() {
       </Card>
 
       {/* Create/Edit Modal */}
-      <Modal show={showModal} onHide={() => setShowModal(false)} size="lg">
+      <Modal show={showModal} onHide={() => setShowModal(false)} size="lg" centered>
         <Modal.Header closeButton>
           <Modal.Title>{editSubstrate ? 'Edit Substrate' : 'New Substrate'}</Modal.Title>
         </Modal.Header>
         <Form onSubmit={handleSave}>
           <Modal.Body>
-            <Row className="mb-3">
+            <Row className="g-3 mb-3">
               <Col md={4}>
                 <Form.Group>
                   <Form.Label>Code</Form.Label>
@@ -190,7 +208,7 @@ function SubstrateList() {
                     required
                     disabled={!!editSubstrate}
                   />
-                  {editSubstrate && <Form.Text className="text-muted">Code cannot be changed</Form.Text>}
+                  {editSubstrate && <Form.Text>Code cannot be changed</Form.Text>}
                 </Form.Group>
               </Col>
               <Col md={4}>
@@ -229,17 +247,28 @@ function SubstrateList() {
                 as="textarea" rows={2}
                 value={form.description}
                 onChange={e => setForm({ ...form, description: e.target.value })}
+                placeholder="Optional description..."
               />
             </Form.Group>
             {!editSubstrate && (
               <Form.Group>
                 <Form.Label>Spectral Data (CXF File)</Form.Label>
-                <div {...getRootProps()} className={`border border-2 rounded p-3 text-center ${isDragActive ? 'border-primary bg-light' : ''}`} style={{ cursor: 'pointer' }}>
+                <div
+                  {...getRootProps()}
+                  className={`dropzone-area ${isDragActive ? 'active' : ''}`}
+                >
                   <input {...getInputProps()} />
-                  {cxfFile
-                    ? <p className="mb-0">{cxfFile.name}</p>
-                    : <p className="mb-0 text-muted small">Drop CXF file here or click to select (optional — provides spectral reflectance for accurate formulation)</p>
-                  }
+                  {cxfFile ? (
+                    <p className="mb-0 fw-medium">{cxfFile.name}</p>
+                  ) : (
+                    <>
+                      <div className="dropzone-icon">+</div>
+                      <p>Drop a CXF file here or click to select</p>
+                      <p className="text-muted" style={{ fontSize: '0.75rem' }}>
+                        Optional — provides spectral reflectance for accurate formulation
+                      </p>
+                    </>
+                  )}
                 </div>
               </Form.Group>
             )}
@@ -254,38 +283,38 @@ function SubstrateList() {
       </Modal>
 
       {/* Delete Confirmation */}
-      <Modal show={deleteConfirm !== null} onHide={() => setDeleteConfirm(null)}>
+      <Modal show={deleteConfirm !== null} onHide={() => setDeleteConfirm(null)} centered size="sm">
         <Modal.Header closeButton><Modal.Title>Confirm Delete</Modal.Title></Modal.Header>
         <Modal.Body>
-          Are you sure you want to deactivate substrate <strong>{deleteConfirm?.code}</strong>?
+          Deactivate substrate <strong>{deleteConfirm?.code}</strong>?
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
-          <Button variant="danger" onClick={() => handleDelete(deleteConfirm.id)}>
+          <Button variant="secondary" size="sm" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
+          <Button variant="danger" size="sm" onClick={() => handleDelete(deleteConfirm.id)}>
             Deactivate
           </Button>
         </Modal.Footer>
       </Modal>
 
       {/* Spectral Data Modal */}
-      <Modal show={showSpectral} onHide={() => setShowSpectral(false)} size="lg">
+      <Modal show={showSpectral} onHide={() => setShowSpectral(false)} size="lg" centered>
         <Modal.Header closeButton>
           <Modal.Title>Spectral Reflectance — {spectralData?.code}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           {spectralData?.spectral_reflectance ? (
             <SpectralChart
-              spectra={[{ label: spectralData.code, values: spectralData.spectral_reflectance, color: '#2563eb' }]}
+              spectra={[{ label: spectralData.code, values: spectralData.spectral_reflectance, color: '#3b82f6' }]}
               height={350}
             />
           ) : (
             <p className="text-muted text-center">No spectral data available.</p>
           )}
           {spectralData?.lab_values && (
-            <div className="text-center mt-3">
-              <span className="me-3">L* {spectralData.lab_values.L?.toFixed(2)}</span>
-              <span className="me-3">a* {spectralData.lab_values.a?.toFixed(2)}</span>
-              <span>b* {spectralData.lab_values.b?.toFixed(2)}</span>
+            <div className="text-center mt-3" style={{ fontSize: '0.875rem' }}>
+              <span className="me-4"><strong>L*</strong> {spectralData.lab_values.L?.toFixed(2)}</span>
+              <span className="me-4"><strong>a*</strong> {spectralData.lab_values.a?.toFixed(2)}</span>
+              <span><strong>b*</strong> {spectralData.lab_values.b?.toFixed(2)}</span>
             </div>
           )}
         </Modal.Body>

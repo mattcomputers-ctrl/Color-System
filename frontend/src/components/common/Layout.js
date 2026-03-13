@@ -9,11 +9,13 @@ function Layout({ user, onLogout }) {
 
   return (
     <div className="d-flex">
-      {/* Sidebar */}
       <div className="sidebar">
-        <div className="brand">Color Formulation</div>
+        <div className="brand">
+          Color Formulation
+          <small>Ink Management System</small>
+        </div>
 
-        <Nav className="flex-column">
+        <Nav className="flex-column flex-grow-1">
           <NavLink to="/" className="nav-link" end>Dashboard</NavLink>
 
           <div className="section-label">Ink Management</div>
@@ -21,7 +23,7 @@ function Layout({ user, onLogout }) {
           <NavLink to="/substrates" className="nav-link">Substrates</NavLink>
 
           <div className="section-label">Pantone</div>
-          <NavLink to="/pantone/targets" className="nav-link">Pantone Targets</NavLink>
+          <NavLink to="/pantone/targets" className="nav-link">Color Targets</NavLink>
           <NavLink to="/pantone/formulas" className="nav-link">Formulas</NavLink>
           {canFormulate && (
             <NavLink to="/pantone/formulate" className="nav-link">Generate Formula</NavLink>
@@ -42,19 +44,19 @@ function Layout({ user, onLogout }) {
 
           {isAdmin && (
             <>
-              <div className="section-label">Admin</div>
-              <NavLink to="/admin/users" className="nav-link">Users</NavLink>
+              <div className="section-label">Administration</div>
+              <NavLink to="/admin/users" className="nav-link">User Management</NavLink>
               <NavLink to="/admin/audit-log" className="nav-link">Audit Log</NavLink>
             </>
           )}
         </Nav>
 
-        <div className="mt-auto p-3" style={{ position: 'absolute', bottom: 0, width: '100%' }}>
+        <div className="sidebar-user">
           <Dropdown>
-            <Dropdown.Toggle variant="link" className="text-white text-decoration-none p-0 w-100 text-start">
-              {user?.full_name || user?.username}
+            <Dropdown.Toggle variant="link" className="dropdown-toggle">
+              <span className="user-name">{user?.full_name || user?.username}</span>
               <br />
-              <small className="text-white-50">{user?.role}</small>
+              <span className="user-role">{user?.role}</span>
             </Dropdown.Toggle>
             <Dropdown.Menu>
               <Dropdown.Item onClick={() => {
@@ -68,7 +70,6 @@ function Layout({ user, onLogout }) {
         </div>
       </div>
 
-      {/* Main content */}
       <div className="main-content">
         <Outlet />
       </div>

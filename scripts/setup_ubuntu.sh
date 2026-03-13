@@ -325,6 +325,7 @@ Type=exec
 User=${APP_USER}
 Group=${APP_USER}
 WorkingDirectory=${APP_DIR}/backend
+EnvironmentFile=${APP_DIR}/backend/.env
 Environment="PATH=${APP_DIR}/backend/venv/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="FLASK_APP=wsgi.py"
 Environment="FLASK_ENV=production"
